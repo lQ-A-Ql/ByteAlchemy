@@ -2,7 +2,7 @@
 
 ## QAQ的自言自语
 
-其实我更愿意叫他ctf的奇怪小工具，写这个玩意儿的起因是前两天的ciscn由于不会写解密脚本啊逆向和流量的最后一个SM4差点就寄啦，还好队里有大手子带我躺。然后网上又找不到好用的工具 cyberchef 又只能对标准的加密算法进行操作，
+其实我更愿意叫他ctf的奇怪小工具但是用不了中文库名，写这个玩意儿的起因是前两天的ciscn由于不会写解密脚本啊逆向和流量的最后一个SM4差点就寄啦，还好队里有大手子带我躺。然后网上又找不到好用的工具 cyberchef 又只能对标准的加密算法进行操作，
 诶正好白嫖了gemini pro 那就下一个 antigravity 自己搓一个吧
 
 整个项目是用了 `electron + vue3 + fastapi + uvicorn` 的形式 调用了element-plus的部分组件，然后decoder部分借鉴了一下cyberchef的布局
@@ -40,6 +40,8 @@
 ## 🚀 快速开始
 
 本项目已完成封装，支持在仅有 Python 环境的系统下运行（无需预装 Node.js）。
+但由于是linux环境开发的，切换到windows下可能还是需要使用 `npm install` + `npm run build` 重新编译一下
+（因为我在windows上跑的时候报错了，说是找不到electron）
 
 ### 1. 安装 Python 依赖
 ```bash
@@ -85,3 +87,4 @@ decrypt/
 ---
 **版本**: 0.0.1
 **作者**: QAQ
+
