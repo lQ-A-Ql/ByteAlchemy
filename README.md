@@ -78,8 +78,7 @@ decrypt/
 ├── core/                  # 加解密核心算法库 (Python)
 ├── electron/              # Electron 主进程与预加载脚本
 ├── src/                   # Vue 3 前端源代码
-├── dist/                  # 预编译的前端资产
-└── release/               # 独立封装的可执行文件 (AppImage/Linux)
+└── dist/                  # 预编译的前端资产
 ```
 
 ## 🛠️ 技术栈
@@ -95,6 +94,7 @@ decrypt/
 ---
 **版本**: 0.0.1
 **作者**: QAQ
+
 
 
 
