@@ -216,7 +216,7 @@ onMounted(() => {
                 </template>
                 <p>由于不会写解密脚本于是用AI搓了一个奇怪小玩意。受 CyberChef 启发，基于 Electron 和 FastAPI 构建。</p>
                 <el-descriptions :column="3" border>
-                    <el-descriptions-item label="版本">2不知道几点几</el-descriptions-item>
+                    <el-descriptions-item label="版本">0.0.1</el-descriptions-item>
                     <el-descriptions-item label="驱动">QAQ</el-descriptions-item>
                     <el-descriptions-item label="状态">
                          <el-tag type="success">运行中</el-tag>
