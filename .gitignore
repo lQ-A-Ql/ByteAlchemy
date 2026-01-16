@@ -10,3 +10,4 @@ releasenote.md
 __pycache__/
 *.pyc
 core/script/user_scripts/*
+PROJECT_INTRO.md
