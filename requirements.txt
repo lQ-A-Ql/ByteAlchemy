@@ -5,6 +5,5 @@ pycryptodome
 starlette
 requests
 websockets
-ptyprocess; sys_platform != "win32"
-pywinpty; sys_platform == "win32"
+ptyprocess
 psutil

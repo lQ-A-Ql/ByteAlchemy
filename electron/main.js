@@ -53,11 +53,7 @@ function startBackend() {
 
     if (isDev) {
         // Development mode: Run from script using virtual environment
-        // Cross-platform: Windows uses Scripts/python.exe, Unix uses bin/python
-        const isWin = process.platform === 'win32'
-        const venvPythonPath = isWin
-            ? path.join(__dirname, '../.venv/Scripts/python.exe')
-            : path.join(__dirname, '../.venv/bin/python')
+        const venvPythonPath = path.join(__dirname, '../.venv/bin/python')
 
         // Fallback to system Python if venv doesn't exist
         let pythonPath
@@ -65,7 +61,7 @@ function startBackend() {
             pythonPath = venvPythonPath
             console.log(`Using venv Python: ${pythonPath}`)
         } else {
-            pythonPath = isWin ? 'python' : 'python3'
+            pythonPath = 'python3'
             console.log(`Venv not found, using system Python: ${pythonPath}`)
         }
 

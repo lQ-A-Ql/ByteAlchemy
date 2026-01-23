@@ -25,12 +25,7 @@ def run():
     # 1. Start Backend
     print("启动后端服务...")
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    is_windows = sys.platform.startswith('win')
-
-    if is_windows:
-        python_exe = os.path.join(base_dir, ".venv", "Scripts", "python.exe")
-    else:
-        python_exe = os.path.join(base_dir, ".venv", "bin", "python")
+    python_exe = os.path.join(base_dir, ".venv", "bin", "python")
 
     if not os.path.exists(python_exe):
         python_exe = sys.executable
@@ -46,7 +41,7 @@ def run():
     # 2. Wait for servers to start
     time.sleep(2)
 
-    npm_cmd = "npm.cmd" if is_windows else "npm"
+    npm_cmd = "npm"
     front_dir = os.path.join(base_dir, "front")
     
     # 3. Build Frontend

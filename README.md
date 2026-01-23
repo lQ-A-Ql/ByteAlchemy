@@ -1,107 +1,347 @@
-# ByteAlchemy - 现代化极客加解密工具
+# ByteAlchemy
 
-## QAQ的自言自语
+## 项目概述
 
-其实我更愿意叫他ctf的奇怪小工具，写这个玩意儿的起因是前两天的ciscn由于不会写解密脚本啊逆向和流量的最后一个SM4差点就寄啦，还好队里有大手子带我躺。然后网上又找不到好用的工具 cyberchef 又只能对标准的加密算法进行操作，
-诶正好白嫖了gemini pro 那就下一个 antigravity 自己搓一个吧
+ByteAlchemy 是我为了能够在应对ctf中非标准加密时以一种更加从容的姿态进行解密而做出的尝试（没有ai不会写的样子真的很狼狈）。项目采用 **Electron + React (Vite)** 构建前端，**Python FastAPI** 提供后端服务。
+目前仅针对 **linux** 进行开发，windows下可以通过 wsl 正常运行 
 
-整个项目是用了 `electron + vue3 + fastapi + uvicorn` 的形式 调用了element-plus的部分组件，然后decoder部分借鉴了一下cyberchef的布局
-我放一点小插图
-<img width="1402" height="900" alt="image" src="https://github.com/user-attachments/assets/b765b7e0-5347-488f-b14e-5b4f410871a9" />
-<img width="1402" height="901" alt="image" src="https://github.com/user-attachments/assets/918b045f-2df0-4435-989a-4d90d16fb438" />
-<img width="1426" height="939" alt="image" src="https://github.com/user-attachments/assets/c979eda0-659a-49ae-8865-7d3755f944ed" />
+核心设计参考 CyberChef 的操作链模型：用户可通过拖拽方式组合多种编码、加解密、哈希算子，实时查看输入输出结果，并支持自定义 S‑Box、Magic Swap 等高级功能。
 
-加密好像有点问题来着，但是解密没出错就不管他啦 ciscn那道流量的密钥是 `ac46fb610b313b4f32fc642d8834b456` 密文我丢项目里 感兴趣的可以试试
+---
 
+## 功能模块
 
-好啦 接下来的介绍就交给AI吧
+### 1. 解码器 (Decoder)
 
-**ByteAlchemy** 是一款基于 **Electron + Vue 3** 构建的现代化图形化调试工具，后端由 **Python FastAPI** 驱动。它采用了类似 **CyberChef** 的“操作链”设计理念，旨在为安全研究人员和开发者提供便捷、直观的编码与加解密验证体验。
+提供 CyberChef 风格的操作链编辑器，支持拖拽排序、一键启用/禁用单个算子。
 
-## ✨ 核心特性
+| 类别   | 支持的操作                                                                |
+| ---- | -------------------------------------------------------------------- |
+| 编码   | Base16、Base32、Base64、Base85（ASCII85 / Z85）、URL 编码、HTML 实体、Unicode 转义 |
+| 对称加密 | AES（ECB/CBC/CFB/OFB/CTR）、SM4（ECB/CBC）、DES、3DES、RC4                   |
+| 哈希   | MD5（可自定义初始化向量、K 表、轮移参数）                                              |
 
-### 1. CyberChef 风格操作链 (Operation Chain)
-- **拼图式操作**：通过拖放不同的加解密算子构建复杂的处理流程。
-- **实时反馈**：支持在链中动态调整参数（如秘钥、IV、S 盒），并即时查看输出结果。
-- **拖拽排序**：使用 `vuedraggable` 实现的操作算子自由排序，逻辑调整极其顺滑。
+- **多格式输入输出**：UTF‑8、HEX、ASCII 互转，支持大小端切换
+- **自定义 S‑Box**：内置标准 AES/SM4/RC4/DES S‑Box，支持 16×16 矩阵编辑、克隆、导入导出
+- **Magic Swap**：AES/SM4 支持密钥调度轮换 (swap_key_schedule) 与数据轮换 (swap_data_round)，便于分析非标变体算法
 
-### 2. 独家 "Magic S-Box" 支持
-- **可视化编辑**：内置 16x16 矩阵视图，直观展示 AES/SM4 等算法的置换盒（S-Box）。
-- **克隆与自定义**：支持基于标准 S 盒（AES/SM4）进行克隆并修改，这在分析非标加密算法时极为有用。
-- **原生算法驱动**：配套纯 Python 实现的 AES 引擎，完美兼容非标准自定义 S 盒。
+### 2. 代码格式化 (Formatter)
 
-### 3. 专业级工作区
-- **全格式支持**：输入输出区域支持 **UTF-8、HEX、ASCII** 相互转换。
-- **大小端切换**：针对 Hex 数据一键切换 **Big-Endian / Little-Endian**。
-- **多样化格式化**：内置 **JSON** 和 **Python** 代码格式化修复工具。
+离线格式化以下语言：
 
-### 4. 极致视觉体验
-- **Deep Purple 主题**：借鉴 SiUI 的深紫色现代极客美学，长时间使用不疲劳。
-- **响应式界面**：多栏布局，自动在大屏幕上扩展工作区域。
+- JSON
+- XML
+- HTML
+- SQL
+- CSS
+- Python
 
-### 5. 高级模块化与编码
-- **SM4 / AES Magic Swap**：支持粒度控制的魔改功能（密钥扩展交换 / 数据轮交换），轻松应对非标算法。
-- **模块开关**：操作链中的步骤支持一键启用/禁用，调试更灵活。
-- **全能代码格式化**：内置 JSON, XML, HTML, SQL, CSS, Python 六大语言的离线格式化工具。
+### 3. 正则工具 (Regex)
 
-## 🚀 快速开始
+- **转义**：将任意字符串转为正则安全格式
+- **生成**：根据数字、大小写字母、自定义字符集自动生成匹配模式
 
-本项目支持 **Windows** 和 **Linux/macOS** 双平台运行。
+### 4. 脚本库 (Script Library)
 
-### 1. 安装 Python 依赖
+- **脚本管理**：创建、编辑、删除用户 Python 脚本
+- **参数解析**：自动识别脚本中的 `input()` 调用，生成预填参数对话框
+- **交互终端**：基于 xterm.js 与 WebSocket PTY 的终端（Linux/macOS），支持：
+  - 连接状态指示灯（呼吸动画）
+
+### 5. 密钥重构 (Key Reconstruction)
+
+积木式编程环境，用于快速生成密钥处理脚本：
+
+| 分类          | 示例积木                                                  |
+| ----------- | ----------------------------------------------------- |
+| 输入          | HEX 输入、字节数组、字符串、整数、范围生成                               |
+| 变换          | XOR 常量/密钥、加/减/乘常量、字节反转、两两交换                           |
+| 位运算         | 循环左移/右移、移位、半字节交换、按位取反、AND/OR                          |
+| S‑Box       | S 盒查表、逆 S 盒查表、自定义查表                                   |
+| 循环          | FOR 循环、遍历字节、WHILE 循环                                  |
+| 函数          | 定义函数、返回数据/HEX、打印 HEX                                  |
+| 变量          | 赋值、读取、切片、拼接                                           |
+| CTypes/Libc | 加载动态库 (CDLL)、srand、rand、struct pack                   |
+| 恶意代码分析      | CryptGenRandom 模拟、srand(Time) 弱随机、线性同余生成器、动态 API 加载模式 |
+| 加密算法        | AES 密钥生成、导出密钥、MD5、SHA256、ChaCha20 初始状态                |
+| 自定义         | 用户可保存常用积木组合                                           |
+
+- **双向同步**：积木链与生成代码可双向解析转换
+- **在线执行**：直接在工具内执行生成的 Python 代码并查看输出
+
+### 6. 设置 (Settings)
+
+- S‑Box 管理（新建、编辑、删除、克隆）
+- 终端壁纸上传与透明度调节
+- 主题配置
+
+---
+
+## 快速开始
+
+### 环境要求
+
+>  Python 3.10+
+> 
+>  Node.js 18+（仅开发模式需要）
+
+### 安装依赖
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 启动程序 (推荐)
-直接运行根目录下的启动脚本：
+### 运行程序
+
 ```bash
 python run.py
 ```
-该脚本会自动启动 Python 后端并唤起预编译好的 Electron 客户端。
 
-### 3. 开发模式 (需 Node.js)
+脚本会依次启动 FastAPI 后端（端口 3335）、WebSocket 终端服务（端口 3336），并自动构建前端、打开 Electron 客户端。
+
+### 开发模式
+
 ```bash
+cd front
 npm install
-npm run electron:dev
+npm run dev
 ```
 
-## 📂 项目结构
+---
+
+## 项目结构
 
 ```
 ByteAlchemy/
-├── run.py                 # 一键启动脚本
-├── backend/               # FastAPI 服务端 (Python)
-├── core/                  # 加解密核心算法库 (Python)
-├── electron/              # Electron 主进程与预加载脚本
-├── src/                   # Vue 3 前端源代码
-└── dist/                  # 预编译的前端资产
+├── run.py                     # 一键启动脚本
+├── backend/
+│   └── server.py              # FastAPI 服务端
+├── core/
+│   ├── decoder/               # 编码/解码、加解密算子实现
+│   │   ├── pipeline.py        # 操作链核心
+│   │   ├── base.py            # Base 编码族
+│   │   ├── aes.py / aes_pure.py
+│   │   ├── sm4.py
+│   │   ├── des.py
+│   │   ├── rc4.py
+│   │   ├── md5.py
+│   │   ├── html.py / url.py / unicode.py
+│   ├── formatter/             # 代码格式化工具
+│   ├── key_recreat/           # 密钥重构积木定义与代码生成
+│   ├── script/                # 脚本管理与终端服务
+│   └── regex.py               # 正则工具
+├── app/
+│   ├── logic/
+│   │   └── sbox_manager.py    # S‑Box 管理逻辑
+│   └── sboxes.json            # 自定义 S‑Box 存储
+├── front/                     # React (Vite) 前端源码
+├── electron/                  # Electron 主进程
+└── requirements.txt
 ```
 
-## 🛠️ 技术栈
-- **Frontend**: Vue 3, Vite, Element Plus, Axios, Vuedraggable, xterm.js
-- **Shell**: Electron
-- **Backend**: Python 3, FastAPI, Uvicorn, PyCryptodome, WebSockets
+---
 
-### 6. 🖥️ 脚本库与交互式终端 (Powerful Scripting)
-- **自定义脚本库**：轻松上传、下载并管理您的 Python 脚本。
-- **智能参数解析**：自动分析脚本中的 `input()` 调用，并生成精美的预填参数对话框。
-- **可靠输入管道**：采用 `stdin` 管道同步机制，解决脚本执行速度过快导致的输入丢失问题。
-- **实时全功能终端**：基于 `xterm.js`，支持跨平台（Unix/Windows）操作，带有关闭提示与重连功能。
-- **动态视觉定制**：
-    - **发光状态灯**：带呼吸感的已连接/未连接指示灯。
-    - **自定义壁纸**：支持上传本地图片作为终端背景，并动态调节不透明度（Opacity）。
-    - **双主题同步**：终端背景色与字体配色随系统深浅模式自动切换。
+## 技术栈
 
-## 最后的碎碎念
-第一次写开源工具，问题还是有点小多啊，还是希望大家多多包涵（这玩意儿我都感觉不大好用说是）
-然后目前是 `decoder+formatter+regex+script` 嘛后面我想加入一个调用hashcat之类的工具的板块，这些玩意儿总是记不住指令
+| 层级  | 技术                                                                     |
+| --- | ---------------------------------------------------------------------- |
+| 前端  | React 18、Vite、TypeScript、react-dnd、xterm.js、Tailwind CSS、Framer Motion |
+| 桌面  | Electron                                                               |
+| 后端  | Python 3、FastAPI、Uvicorn、PyCryptodome、websockets                       |
 
 ---
-**版本**: 0.0.1
-**作者**: QAQ
 
+## 版本
 
+当前版本：**0.0.2 BETA**
 
+## 作者
 
+QAQ
 
+---
+
+## API 参考
+
+后端服务启动后默认监听 `http://127.0.0.1:3335`，以下为主要接口：
+
+### 编码/解码
+
+| 方法   | 路径                    | 说明              |
+| ---- | --------------------- | --------------- |
+| POST | `/api/base64/encode`  | Base64 编码       |
+| POST | `/api/base64/decode`  | Base64 解码       |
+| POST | `/api/base32/encode`  | Base32 编码       |
+| POST | `/api/base32/decode`  | Base32 解码       |
+| POST | `/api/base16/encode`  | Base16 (Hex) 编码 |
+| POST | `/api/base16/decode`  | Base16 解码       |
+| POST | `/api/base85/encode`  | Base85 编码       |
+| POST | `/api/base85/decode`  | Base85 解码       |
+| POST | `/api/url/encode`     | URL 编码          |
+| POST | `/api/url/decode`     | URL 解码          |
+| POST | `/api/html/encode`    | HTML 实体编码       |
+| POST | `/api/html/decode`    | HTML 实体解码       |
+| POST | `/api/unicode/encode` | Unicode 转义编码    |
+| POST | `/api/unicode/decode` | Unicode 转义解码    |
+
+### 加解密
+
+| 方法   | 路径                  | 说明      |
+| ---- | ------------------- | ------- |
+| POST | `/api/aes/encrypt`  | AES 加密  |
+| POST | `/api/aes/decrypt`  | AES 解密  |
+| POST | `/api/sm4/encrypt`  | SM4 加密  |
+| POST | `/api/sm4/decrypt`  | SM4 解密  |
+| POST | `/api/des/encrypt`  | DES 加密  |
+| POST | `/api/des/decrypt`  | DES 解密  |
+| POST | `/api/3des/encrypt` | 3DES 加密 |
+| POST | `/api/3des/decrypt` | 3DES 解密 |
+| POST | `/api/rc4/encrypt`  | RC4 加密  |
+| POST | `/api/rc4/decrypt`  | RC4 解密  |
+| POST | `/api/md5/hash`     | MD5 哈希  |
+
+### 操作链
+
+| 方法   | 路径                  | 说明    |
+| ---- | ------------------- | ----- |
+| POST | `/api/pipeline/run` | 执行操作链 |
+
+请求体示例：
+
+```json
+{
+  "data": "Hello World",
+  "operations": [
+    { "name": "base64_encode", "params": {} },
+    { "name": "url_encode", "params": {} }
+  ]
+}
+```
+
+### 格式化
+
+| 方法   | 路径            | 说明    |
+| ---- | ------------- | ----- |
+| POST | `/api/format` | 代码格式化 |
+
+### 正则工具
+
+| 方法   | 路径                    | 说明     |
+| ---- | --------------------- | ------ |
+| POST | `/api/regex/escape`   | 字符串转义  |
+| POST | `/api/regex/generate` | 生成正则模式 |
+
+### 脚本库
+
+| 方法     | 路径                  | 说明     |
+| ------ | ------------------- | ------ |
+| GET    | `/api/scripts`      | 获取脚本列表 |
+| POST   | `/api/scripts`      | 创建脚本   |
+| GET    | `/api/scripts/{id}` | 获取脚本详情 |
+| PUT    | `/api/scripts/{id}` | 更新脚本   |
+| DELETE | `/api/scripts/{id}` | 删除脚本   |
+
+### S‑Box 管理
+
+| 方法     | 路径                        | 说明            |
+| ------ | ------------------------- | ------------- |
+| GET    | `/api/sbox/names`         | 获取所有 S‑Box 名称 |
+| GET    | `/api/sbox/get/{name}`    | 获取指定 S‑Box 内容 |
+| POST   | `/api/sbox/save`          | 保存自定义 S‑Box   |
+| DELETE | `/api/sbox/delete/{name}` | 删除自定义 S‑Box   |
+
+### 密钥重构
+
+| 方法   | 路径                  | 说明        |
+| ---- | ------------------- | --------- |
+| GET  | `/api/key-blocks`   | 获取所有积木块定义 |
+| POST | `/api/key-generate` | 生成代码      |
+| POST | `/api/key-execute`  | 执行代码      |
+| POST | `/api/key-parse`    | 解析代码为积木链  |
+
+---
+
+## 使用示例
+
+### 示例 1：Base64 编码后 URL 编码
+
+1. 打开 **解码器** 页面
+2. 从左侧算子列表拖拽 **Base64 编码** 到操作链
+3. 继续拖拽 **URL 编码** 到操作链
+4. 在输入框输入原始文本
+5. 点击 **执行** 按钮查看结果
+
+### 示例 2：使用自定义 S‑Box 解密 SM4
+
+1. 进入 **设置 → S‑Box 管理**
+2. 点击 **克隆** 标准 SM4 S‑Box，修改部分字节后保存为 `My SM4`
+3. 返回 **解码器** 页面
+4. 添加 **SM4 解密** 算子，在参数面板选择 `My SM4`
+5. 填写密钥、IV、密文后执行
+
+### 示例 3：密钥重构积木编程
+
+1. 进入 **密钥重构** 页面
+2. 从左侧拖入 **HEX 输入** 积木，填入初始数据
+3. 添加 **XOR 常量** 积木设置异或值
+4. 添加 **S 盒查表** 积木选择标准 AES S‑Box
+5. 添加 **返回 HEX** 积木
+6. 点击 **执行** 查看处理结果
+
+---
+
+## 常见问题
+
+### 1. 启动时提示端口被占用
+
+`run.py` 启动前会自动尝试释放 3335 和 3336 端口。如果仍失败，请手动终止占用进程：
+
+```bash
+lsof -i :3335 | awk 'NR>1 {print $2}' | xargs kill -9
+```
+
+### 2. 前端构建失败
+
+确保 Node.js 版本 >= 18，并在 `front` 目录下执行：
+
+```bash
+npm install
+npm run build
+```
+
+### 3. PyCryptodome 安装失败
+
+部分系统需要先安装编译工具：
+
+```bash
+# Ubuntu/Debian
+sudo apt install build-essential python3-dev
+```
+
+---
+
+## 更新日志
+
+### v0.0.2 BETA (2026-01-23)
+
+- 新增 DES/3DES、MD5、RC4 加解密模块
+- 新增密钥重构积木式编程环境
+- 新增恶意代码分析类积木（CryptGenRandom、弱随机模拟等）
+- 新增 CTypes/Libc 积木（动态库加载、srand/rand 调用）
+- 支持积木↔代码双向同步
+- 脚本库新增交互式终端（跨平台 PTY）
+- 终端支持自定义壁纸与透明度
+- 修复 HEX 输入格式处理问题
+- 优化操作链拖拽体验
+
+---
+
+## 下一步计划
+
+> 下一步会加入一个工具箱，我想通过GUI调用hashcat这样的工具，这样就可以不用再去记忆那些繁琐的参数和选项了
+
+---
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE) 开源。
