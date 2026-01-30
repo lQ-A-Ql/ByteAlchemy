@@ -6,7 +6,7 @@ from core.decoder.base import BaseEncoders
 from core.decoder.html import HtmlEncoders
 from core.decoder.unicode import UnicodeEncoders
 from core.decoder.url import UrlEncoders
-from core.decoder.aes import AesEncoders
+from core.decoder.aes_pure import AesPureEncoders
 from core.decoder.sm4 import SM4Encoders
 from core.formatter.json_formatter import JsonFormatter
 from core.formatter.python_formatter import PythonFormatter
@@ -32,7 +32,7 @@ class MainLogic(IMainLogic):
         class EncoderCollection:
             def __init__(self):
                 # 注册各模块编码器
-                for module in [BaseEncoders, HtmlEncoders, UnicodeEncoders, UrlEncoders, AesEncoders, SM4Encoders]:
+                for module in [BaseEncoders, HtmlEncoders, UnicodeEncoders, UrlEncoders, AesPureEncoders, SM4Encoders]:
                     for attr in dir(module):
                         if not attr.startswith('_'):
                             setattr(self, attr, getattr(module, attr))
@@ -44,9 +44,15 @@ class MainLogic(IMainLogic):
         # AES / SM4 需要参数
         if op_name in ["AES 加密", "AES 解密"]:
             if op_name == "AES 加密":
-                return self.encoders.aes_encrypt(data, params['key'], params['mode'], params['iv'], params['padding'])
+                return self.encoders.encrypt(data, params['key'], params['mode'], params['iv'], params['padding'],
+                                            key_type=params.get('key_type', 'utf-8'), 
+                                            iv_type=params.get('iv_type', 'utf-8'),
+                                            data_type=params.get('data_type'))
             else:
-                return self.encoders.aes_decrypt(data, params['key'], params['mode'], params['iv'], params['padding'])
+                return self.encoders.decrypt(data, params['key'], params['mode'], params['iv'], params['padding'],
+                                            key_type=params.get('key_type', 'utf-8'), 
+                                            iv_type=params.get('iv_type', 'utf-8'),
+                                            data_type=params.get('data_type'))
                 
         if op_name in ["SM4 加密", "SM4 解密"]:
             # SM4 可能有魔改S盒参数，这里预留处理

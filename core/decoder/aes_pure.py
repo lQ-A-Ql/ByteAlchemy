@@ -238,6 +238,10 @@ class AesPureEncoders:
             return data + bytes([pad_len] * pad_len)
         elif padding == 'zeropadding':
             return data + b'\x00' * pad_len
+        elif padding == 'iso10126':
+            return data + os.urandom(pad_len - 1) + bytes([pad_len])
+        elif padding == 'ansix923':
+            return data + b'\x00' * (pad_len - 1) + bytes([pad_len])
         return data + bytes([pad_len] * pad_len)
 
     @staticmethod
@@ -245,25 +249,117 @@ class AesPureEncoders:
         padding = padding.lower()
         if padding == 'nopadding': return data
         if padding == 'zeropadding': return data.rstrip(b'\x00')
+        if padding in ['pkcs7', 'iso10126', 'ansix923']:
+            pad_len = data[-1]
+            if pad_len > 16 or pad_len < 1:
+                raise ValueError("Invalid padding length")
+            return data[:-pad_len]
         pad_len = data[-1]
         return data[:-pad_len]
 
     @staticmethod
-    def encrypt(data: str, key: str, mode: str = 'ECB', iv: str = '', padding: str = 'pkcs7', sbox=None,
-               swap_key_schedule: bool = False, swap_data_round: bool = False) -> str:
-        key_bytes = hashlib.md5(key.encode('utf-8')).digest()
-        aes = AesPure(key_bytes, sbox, swap_key_schedule, swap_data_round)
+    def _parse_sbox(sbox_str):
+        """解析自定义S盒"""
+        if not sbox_str:
+            return None
+        if isinstance(sbox_str, list) and len(sbox_str) == 256:
+            return sbox_str
+        try:
+            import json
+            sbox = json.loads(sbox_str)
+            if isinstance(sbox, list) and len(sbox) == 256:
+                return sbox
+        except:
+            pass
+        try:
+            import binascii
+            sbox_str = sbox_str.replace(' ', '').replace('\n', '')
+            sbox = list(binascii.unhexlify(sbox_str))
+            if len(sbox) == 256:
+                return sbox
+        except:
+            pass
+        return None
+
+    @staticmethod
+    def encrypt(data: str, key: str, mode: str = 'ECB', iv: str = '', padding: str = 'pkcs7', 
+                sbox=None, swap_key_schedule: bool = False, swap_data_round: bool = False,
+                key_type: str = 'utf-8', iv_type: str = 'utf-8', data_type: str = None) -> str:
+        """AES加密
         
-        data_bytes = data.encode('utf-8')
-        padded = AesPureEncoders._pad(data_bytes, padding)
+        Args:
+            data: 输入明文
+            key: 密钥
+            mode: 加密模式 (ECB/CBC/CFB/OFB/CTR)
+            iv: 初始化向量
+            padding: 填充方式 (pkcs7/zeropadding/nopadding/iso10126/ansix923)
+            sbox: 自定义S盒 (256字节)
+            swap_key_schedule: 密钥调度交换
+            swap_data_round: 数据轮次交换
+            key_type: 密钥格式 (hex/utf-8)
+            iv_type: IV格式 (hex/utf-8)
+            data_type: 数据格式 (hex/utf-8)
+        """
+        if not data:
+            return ""
+        
+        # 密钥处理
+        if key_type.lower() == 'hex':
+            try:
+                key_bytes = bytes.fromhex(key.replace(' ', ''))
+            except:
+                raise ValueError("密钥不是有效的Hex字符串")
+        else:
+            key_bytes = hashlib.sha256(key.encode('utf-8')).digest()
+        
+        # 自定义S盒
+        custom_sbox = AesPureEncoders._parse_sbox(sbox)
+        
+        aes = AesPure(key_bytes, custom_sbox, swap_key_schedule, swap_data_round)
+        
+        # 数据处理
+        if data_type and data_type.lower() == 'hex':
+            try:
+                data_bytes = bytes.fromhex(data.replace(' ', '').replace('\n', ''))
+            except:
+                raise ValueError("输入数据不是有效的Hex字符串")
+        else:
+            data_bytes = data.encode('utf-8')
         
         mode = mode.upper()
-        iv_bytes = hashlib.md5(iv.encode('utf-8')).digest() if iv else b'\x00' * 16
+        
+        # IV处理
+        if mode in ['CBC', 'CFB', 'OFB', 'CTR']:
+            if not iv:
+                iv_bytes = b'\x00' * 16
+            elif iv_type.lower() == 'hex':
+                try:
+                    iv_bytes = bytes.fromhex(iv.replace(' ', ''))
+                    if len(iv_bytes) != 16:
+                        raise ValueError(f"IV Hex长度必须为16字节 (当前: {len(iv_bytes)})")
+                except ValueError as e:
+                    if "IV Hex" in str(e): raise e
+                    raise ValueError("IV不是有效的Hex字符串")
+            else:
+                iv_bytes = hashlib.md5(iv.encode('utf-8')).digest()
+        else:
+            iv_bytes = None
+        
+        # 流模式不需要填充
+        is_stream = mode in ['CFB', 'OFB', 'CTR']
+        if is_stream and padding.lower() == 'nopadding':
+            padded = data_bytes
+        else:
+            padded = AesPureEncoders._pad(data_bytes, padding)
         
         res = b''
+        
         if mode == 'ECB':
             for i in range(0, len(padded), 16):
-                res += aes.encrypt_block(padded[i:i+16])
+                block = padded[i:i+16]
+                if len(block) < 16: break
+                res += aes.encrypt_block(block)
+                
         elif mode == 'CBC':
             prev = iv_bytes
             for i in range(0, len(padded), 16):
@@ -271,35 +367,189 @@ class AesPureEncoders:
                 enc = aes.encrypt_block(block)
                 res += enc
                 prev = enc
-        # ... Other modes can be added (CTR, etc)
+                
+        elif mode == 'CTR':
+            ctr = int.from_bytes(iv_bytes, byteorder='big')
+            for i in range(0, len(padded), 16):
+                block = padded[i:i+16]
+                ctr_block = ctr.to_bytes(16, byteorder='big')
+                keystream = aes.encrypt_block(ctr_block)
+                chunk_len = len(block)
+                cipher_chunk = bytes([a ^ b for a, b in zip(block, keystream[:chunk_len])])
+                res += cipher_chunk
+                ctr += 1
+                
+        elif mode == 'OFB':
+            last_iv = iv_bytes
+            for i in range(0, len(padded), 16):
+                block = padded[i:i+16]
+                keystream = aes.encrypt_block(last_iv)
+                chunk_len = len(block)
+                cipher_chunk = bytes([a ^ b for a, b in zip(block, keystream[:chunk_len])])
+                res += cipher_chunk
+                last_iv = keystream
+                
+        elif mode == 'CFB':
+            last_block = iv_bytes
+            for i in range(0, len(padded), 16):
+                block = padded[i:i+16]
+                keystream = aes.encrypt_block(last_block)
+                chunk_len = len(block)
+                cipher_chunk = bytes([a ^ b for a, b in zip(block, keystream[:chunk_len])])
+                res += cipher_chunk
+                if chunk_len == 16:
+                    last_block = cipher_chunk
+        else:
+            raise ValueError(f"不支持的加密模式: {mode}")
         
+        # 返回自动携带IV（当IV未提供且非ECB模式时）
+        if not iv and iv_bytes and mode != 'ECB':
+            return base64.b64encode(iv_bytes + res).decode('utf-8')
         return base64.b64encode(res).decode('utf-8')
 
     @staticmethod
-    def decrypt(data: str, key: str, mode: str = 'ECB', iv: str = '', padding: str = 'pkcs7', sbox=None,
-               swap_key_schedule: bool = False, swap_data_round: bool = False) -> str:
+    def decrypt(data: str, key: str, mode: str = 'ECB', iv: str = '', padding: str = 'pkcs7', 
+                sbox=None, swap_key_schedule: bool = False, swap_data_round: bool = False,
+                key_type: str = 'utf-8', iv_type: str = 'utf-8', data_type: str = None) -> str:
+        """AES解密
+        
+        Args:
+            data: 输入密文 (Base64或Hex)
+            key: 密钥
+            mode: 加密模式 (ECB/CBC/CFB/OFB/CTR)
+            iv: 初始化向量
+            padding: 填充方式 (pkcs7/zeropadding/nopadding/iso10126/ansix923)
+            sbox: 自定义S盒 (256字节)
+            swap_key_schedule: 密钥调度交换
+            swap_data_round: 数据轮次交换
+            key_type: 密钥格式 (hex/utf-8)
+            iv_type: IV格式 (hex/utf-8)
+            data_type: 数据格式 (hex/base64)
+        """
+        if not data:
+            return ""
+        
+        # 密钥处理
+        if key_type.lower() == 'hex':
+            try:
+                key_bytes = bytes.fromhex(key.replace(' ', ''))
+            except:
+                raise ValueError("密钥不是有效的Hex字符串")
+        else:
+            key_bytes = hashlib.sha256(key.encode('utf-8')).digest()
+        
+        # 自定义S盒
+        custom_sbox = AesPureEncoders._parse_sbox(sbox)
+        
+        aes = AesPure(key_bytes, custom_sbox, swap_key_schedule, swap_data_round)
+        
+        # 数据处理
         try:
-            encrypted = base64.b64decode(data)
-        except:
-            return "[Error] Invalid Base64"
-            
-        key_bytes = hashlib.md5(key.encode('utf-8')).digest()
-        aes = AesPure(key_bytes, sbox, swap_key_schedule, swap_data_round)
+            if data_type and data_type.lower() == 'hex':
+                encrypted = bytes.fromhex(data.replace(' ', '').replace('\n', ''))
+            elif data_type and data_type.lower() == 'base64':
+                encrypted = base64.b64decode(data)
+            else:
+                encrypted = base64.b64decode(data)
+        except Exception as e:
+            if data_type:
+                raise ValueError(f"输入数据解析失败 ({data_type}): {str(e)}")
+            return "[Error] Invalid input data"
         
         mode = mode.upper()
-        iv_bytes = hashlib.md5(iv.encode('utf-8')).digest() if iv else b'\x00' * 16
+        
+        # IV处理
+        iv_bytes = None
+        data_content = encrypted
+        
+        if mode in ['CBC', 'CFB', 'OFB', 'CTR']:
+            if iv:
+                if iv_type.lower() == 'hex':
+                    try:
+                        iv_bytes = bytes.fromhex(iv.replace(' ', ''))
+                        if len(iv_bytes) != 16:
+                            raise ValueError(f"IV Hex长度必须为16字节 (当前: {len(iv_bytes)})")
+                    except ValueError as e:
+                        if "IV Hex" in str(e): raise e
+                        raise ValueError("IV不是有效的Hex字符串")
+                else:
+                    iv_bytes = hashlib.md5(iv.encode('utf-8')).digest()
+            else:
+                # 从密文中提取IV
+                if len(encrypted) < 16:
+                    raise ValueError("加密数据太短，无法提取IV")
+                iv_bytes = encrypted[:16]
+                data_content = encrypted[16:]
         
         res = b''
+        
         if mode == 'ECB':
-            for i in range(0, len(encrypted), 16):
-                res += aes.decrypt_block(encrypted[i:i+16])
+            for i in range(0, len(data_content), 16):
+                block = data_content[i:i+16]
+                if len(block) < 16: break
+                res += aes.decrypt_block(block)
+                
         elif mode == 'CBC':
             prev = iv_bytes
-            for i in range(0, len(encrypted), 16):
-                block = encrypted[i:i+16]
+            for i in range(0, len(data_content), 16):
+                block = data_content[i:i+16]
+                if len(block) < 16: break
                 dec = aes.decrypt_block(block)
                 res += bytes([a ^ b for a, b in zip(dec, prev)])
                 prev = block
                 
-        unpadded = AesPureEncoders._unpad(res, padding)
-        return unpadded.decode('utf-8', errors='replace')
+        elif mode == 'CTR':
+            ctr = int.from_bytes(iv_bytes, byteorder='big')
+            for i in range(0, len(data_content), 16):
+                block = data_content[i:i+16]
+                ctr_block = ctr.to_bytes(16, byteorder='big')
+                keystream = aes.encrypt_block(ctr_block)
+                chunk_len = len(block)
+                plain_chunk = bytes([a ^ b for a, b in zip(block, keystream[:chunk_len])])
+                res += plain_chunk
+                ctr += 1
+                
+        elif mode == 'OFB':
+            last_iv = iv_bytes
+            for i in range(0, len(data_content), 16):
+                block = data_content[i:i+16]
+                keystream = aes.encrypt_block(last_iv)
+                chunk_len = len(block)
+                plain_chunk = bytes([a ^ b for a, b in zip(block, keystream[:chunk_len])])
+                res += plain_chunk
+                last_iv = keystream
+                
+        elif mode == 'CFB':
+            last_block = iv_bytes
+            for i in range(0, len(data_content), 16):
+                block = data_content[i:i+16]
+                keystream = aes.encrypt_block(last_block)
+                chunk_len = len(block)
+                plain_chunk = bytes([a ^ b for a, b in zip(block, keystream[:chunk_len])])
+                res += plain_chunk
+                if chunk_len == 16:
+                    last_block = block
+        else:
+            raise ValueError(f"不支持的加密模式: {mode}")
+        
+        # 去填充
+        is_stream = mode in ['CFB', 'OFB', 'CTR']
+        if not is_stream:
+            try:
+                res = AesPureEncoders._unpad(res, padding)
+            except:
+                pass  # 填充错误时返回原数据
+        
+        # 输出处理
+        try:
+            text_res = res.decode('utf-8')
+            import string
+            printable = set(string.printable)
+            has_weird = any(c not in printable and c not in ['\n', '\r', '\t'] for c in text_res)
+            if '\x00' in text_res or has_weird:
+                return repr(text_res)
+            return text_res
+        except UnicodeDecodeError:
+            return res.hex()
+        except:
+            return res.hex()

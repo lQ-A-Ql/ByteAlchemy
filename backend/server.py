@@ -11,7 +11,6 @@ from fastapi.responses import JSONResponse
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from core.decoder.base import BaseEncoders
-from core.decoder.aes import AesEncoders
 from core.decoder.sm4 import SM4Encoders
 from core.decoder.html import HtmlEncoders
 from core.decoder.url import UrlEncoders
@@ -230,16 +229,13 @@ class AesRequest(BaseModel):
 def aes_encrypt(req: AesRequest):
     try:
         sbox = sbox_manager.get_sbox(req.sbox_name)
-        # Use Pure implementation if Magic Swap is requested or non-standard S-Box
-        use_pure = (req.sbox_name != "Standard AES") or req.swap_key_schedule or req.swap_data_round
-        
-        if not use_pure:
-            result = AesEncoders.aes_encrypt(req.data, req.key, req.mode, req.iv, req.padding, 
-                                           key_type=req.key_type, iv_type=req.iv_type, data_type=req.data_type)
-        else:
-            result = AesPureEncoders.encrypt(req.data, req.key, req.mode, req.iv, req.padding, sbox=sbox,
-                                           swap_key_schedule=req.swap_key_schedule,
-                                           swap_data_round=req.swap_data_round)
+        # Now always use Pure implementation as it's the only one remaining
+        result = AesPureEncoders.encrypt(req.data, req.key, req.mode, req.iv, req.padding, sbox=sbox,
+                                       swap_key_schedule=req.swap_key_schedule,
+                                       swap_data_round=req.swap_data_round,
+                                       key_type=req.key_type,
+                                       iv_type=req.iv_type,
+                                       data_type=req.data_type)
         return {"result": result}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -248,16 +244,13 @@ def aes_encrypt(req: AesRequest):
 def aes_decrypt(req: AesRequest):
     try:
         sbox = sbox_manager.get_sbox(req.sbox_name)
-        # Use Pure implementation if Magic Swap is requested or non-standard S-Box
-        use_pure = (req.sbox_name != "Standard AES") or req.swap_key_schedule or req.swap_data_round
-        
-        if not use_pure:
-            result = AesEncoders.aes_decrypt(req.data, req.key, req.mode, req.iv, req.padding,
-                                           key_type=req.key_type, iv_type=req.iv_type, data_type=req.data_type)
-        else:
-            result = AesPureEncoders.decrypt(req.data, req.key, req.mode, req.iv, req.padding, sbox=sbox,
-                                           swap_key_schedule=req.swap_key_schedule,
-                                           swap_data_round=req.swap_data_round)
+        # Now always use Pure implementation
+        result = AesPureEncoders.decrypt(req.data, req.key, req.mode, req.iv, req.padding, sbox=sbox,
+                                       swap_key_schedule=req.swap_key_schedule,
+                                       swap_data_round=req.swap_data_round,
+                                       key_type=req.key_type,
+                                       iv_type=req.iv_type,
+                                       data_type=req.data_type)
         return {"result": result}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -732,7 +725,6 @@ async def parse_key_code_endpoint(request: Request):
         return JSONResponse({"success": False, "error": str(e)})
 
 @app.post("/api/key-execute")
-
 def execute_key_code(request: KeyExecuteRequest):
     """执行生成的代码"""
     if key_recreat_generator is None:
@@ -744,6 +736,111 @@ def execute_key_code(request: KeyExecuteRequest):
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ==========================================
+# Terminal WebSocket Handler (Integrated)
+# ==========================================
+from fastapi import WebSocket, WebSocketDisconnect
+import asyncio
+from core.script.terminal_server import TerminalSession
+
+@app.websocket("/ws/terminal")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    
+    # 调试日志
+    log_file = os.path.join(os.path.expanduser("~"), "byte_alchemy_terminal_ws.log")
+    def log(msg):
+        try:
+            with open(log_file, "a") as f:
+                f.write(f"{msg}\n")
+        except: pass
+        print(msg)
+
+    session = TerminalSession()
+    log("New WebSocket connection accepted")
+
+    async def _send_loop():
+        """从PTY读取并发送到WS"""
+        try:
+            while session.running:
+                # 使用 run_in_executor 避免阻塞 asyncio loop
+                output = await asyncio.get_event_loop().run_in_executor(
+                    None, session.read, 0.05
+                )
+                if output:
+                    await websocket.send_text(output)
+                else:
+                    await asyncio.sleep(0.02)
+        except Exception as e:
+            log(f"Send loop error: {e}")
+
+    send_task = None
+    try:
+        # Determine CWD
+        initial_cwd = None
+        if os.environ.get("APPIMAGE"):
+            initial_cwd = os.path.dirname(os.environ["APPIMAGE"])
+        else:
+            initial_cwd = os.getcwd()
+            
+        # 1. 握手/初始化
+        # 不同于 websockets 库，FastAPI 已经 accept 了
+        # 等待客户端发送 INIT
+        try:
+            init_msg = await websocket.receive_text()
+            if init_msg.startswith("INIT:"):
+                parts = init_msg.split(":")
+                rows = int(parts[1]) if len(parts) > 1 else 24
+                cols = int(parts[2]) if len(parts) > 2 else 80
+                session.start(rows, cols, cwd=initial_cwd)
+                log(f"Session started with size {rows}x{cols}, cwd={initial_cwd}")
+            else:
+                session.start(cwd=initial_cwd)
+                log(f"Session started with default size, cwd={initial_cwd}")
+        except Exception as e:
+            log(f"Init failed: {e}")
+            await websocket.close()
+            return
+
+        if not session.running:
+            await websocket.send_text("\033[1;31m[Error] Failed to start terminal session\033[0m\r\n")
+            await websocket.close()
+            return
+
+        await websocket.send_text("\033[1;32m[Terminal Ready - Integrated]\033[0m\r\n")
+        
+        # 启动发送任务
+        send_task = asyncio.create_task(_send_loop())
+        
+        # 接收循环
+        while True:
+            message = await websocket.receive_text()
+            
+            if not session.running:
+                break
+                
+            if message.startswith("RESIZE:"):
+                parts = message.split(":")
+                rows = int(parts[1]) if len(parts) > 1 else 24
+                cols = int(parts[2]) if len(parts) > 2 else 80
+                session.resize(rows, cols)
+            elif message.startswith("CMD:"):
+                cmd = message[4:]
+                session.write(cmd + "\r\n")
+            else:
+                session.write(message)
+                
+    except WebSocketDisconnect:
+        log("WebSocket disconnected")
+    except Exception as e:
+        log(f"WebSocket error: {e}")
+    finally:
+        if send_task:
+            send_task.cancel()
+        session.stop()
+        log("Session stopped")
 
 if __name__ == "__main__":
     # Electron will likely spawn this process. 

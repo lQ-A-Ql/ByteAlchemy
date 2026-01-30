@@ -111,7 +111,6 @@ def url_decode(data, params):
     return UrlEncoders.url_decode(data)
 
 # AES加解密
-from core.decoder.aes import AesEncoders
 from core.decoder.aes_pure import AesPureEncoders
 
 @register_operation('aes_encrypt')
@@ -127,12 +126,9 @@ def aes_encrypt(data, params):
     val_swap_key = params.get('swap_key_schedule', False)
     val_swap_data = params.get('swap_data_round', False)
 
-    if sbox or val_swap_key or val_swap_data:
-        # Use Pure if S-Box is provided OR Magic Swap active
-        return AesPureEncoders.encrypt(data, key, mode, iv, padding, sbox=sbox, 
-                                     swap_key_schedule=val_swap_key, swap_data_round=val_swap_data)
-    return AesEncoders.aes_encrypt(data, key, mode, iv, padding, 
-                                 key_type=val_key_type, iv_type=val_iv_type, data_type=val_data_type)
+    return AesPureEncoders.encrypt(data, key, mode, iv, padding, sbox=sbox, 
+                                   swap_key_schedule=val_swap_key, swap_data_round=val_swap_data,
+                                   key_type=val_key_type, iv_type=val_iv_type, data_type=val_data_type)
 
 @register_operation('aes_decrypt')
 def aes_decrypt(data, params):
@@ -147,11 +143,10 @@ def aes_decrypt(data, params):
     val_swap_key = params.get('swap_key_schedule', False)
     val_swap_data = params.get('swap_data_round', False)
     
-    if sbox or val_swap_key or val_swap_data:
-        return AesPureEncoders.decrypt(data, key, mode, iv, padding, sbox=sbox,
-                                     swap_key_schedule=val_swap_key, swap_data_round=val_swap_data)
-    return AesEncoders.aes_decrypt(data, key, mode, iv, padding,
-                                 key_type=val_key_type, iv_type=val_iv_type, data_type=val_data_type)
+    return AesPureEncoders.decrypt(data, key, mode, iv, padding, sbox=sbox,
+                                   swap_key_schedule=val_swap_key, swap_data_round=val_swap_data,
+                                   key_type=val_key_type, iv_type=val_iv_type, data_type=val_data_type)
+
 
 # SM4加解密
 from core.decoder.sm4 import SM4Encoders
