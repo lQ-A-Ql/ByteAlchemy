@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Search, Wand2, ShieldAlert, Regex as RegexIcon } from 'lucide-react';
-import { escapeRegex, generateRegex } from '@/app/api';
+import { escapeRegex, generateRegex } from '@/services/api';
 
 export function RegexPage() {
     const [escapeInput, setEscapeInput] = useState('');

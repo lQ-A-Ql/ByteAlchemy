@@ -89,10 +89,20 @@ export function XTermTerminal() {
         }
     }, []);
 
+    const sendInput = useCallback((data: string) => {
+        if (websocket.current?.readyState === WebSocket.OPEN) {
+            websocket.current.send(data);
+        }
+    }, []);
+
     useEffect(() => {
         (window as any).__xtermSendCommand = sendCommand;
-        return () => { delete (window as any).__xtermSendCommand; };
-    }, [sendCommand]);
+        (window as any).__xtermSendInput = sendInput;
+        return () => {
+            delete (window as any).__xtermSendCommand;
+            delete (window as any).__xtermSendInput;
+        };
+    }, [sendCommand, sendInput]);
 
     // Initialize terminal
     useEffect(() => {
@@ -196,4 +206,9 @@ export function XTermTerminal() {
 export function runTerminalCommand(cmd: string) {
     const fn = (window as any).__xtermSendCommand;
     if (fn) fn(cmd);
+}
+
+export function runTerminalInput(data: string) {
+    const fn = (window as any).__xtermSendInput;
+    if (fn) fn(data);
 }

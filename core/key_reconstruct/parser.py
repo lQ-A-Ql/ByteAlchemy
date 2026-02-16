@@ -139,8 +139,32 @@ def match_sequence(statements: List[ast.AST], start_index: int, blocks_def: Dict
             inner = node.value.func.value
             if is_call_to(inner, 'hashlib', 'md5'):
                  return [create_block("hash_md5", {}, f"md5_{id(node)}")], 1
+            if is_call_to(inner, 'hashlib', 'sha1'):
+                 return [create_block("hash_sha1", {}, f"sha1_{id(node)}")], 1
             if is_call_to(inner, 'hashlib', 'sha256'):
                  return [create_block("hash_sha256", {}, f"sha256_{id(node)}")], 1
+            if is_call_to(inner, 'hashlib', 'sha512'):
+                 return [create_block("hash_sha512", {}, f"sha512_{id(node)}")], 1
+
+    # data = hmac.new(key, data, hashlib.sha256).digest()
+    if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+        if isinstance(node.value.func, ast.Attribute) and node.value.func.attr == 'digest':
+            inner = node.value.func.value
+            if isinstance(inner, ast.Call) and is_call_to(inner, 'hmac', 'new'):
+                if len(inner.args) >= 3 and is_call_to(inner.args[2], 'hashlib', 'sha256'):
+                    return [create_block("hmac_sha256", {}, f"hmac_{id(node)}")], 1
+
+    # data = hashlib.pbkdf2_hmac('sha256', data, salt, iterations, dklen=...)
+    if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+        if is_call_to(node.value, 'hashlib', 'pbkdf2_hmac'):
+            return [create_block("pbkdf2_sha256", {}, f"pbkdf2_{id(node)}")], 1
+
+    # data = zlib.crc32(data) & 0xFFFFFFFF
+    if isinstance(node, ast.Assign) and isinstance(node.value, ast.BinOp):
+        if isinstance(node.value.op, ast.BitAnd) and is_call_to(node.value.left, 'zlib', 'crc32'):
+            return [create_block("crc32", {}, f"crc_{id(node)}")], 1
+        if isinstance(node.value.op, ast.BitAnd) and is_call_to(node.value.left, 'zlib', 'adler32'):
+            return [create_block("adler32", {}, f"adler_{id(node)}")], 1
                  
     # --- Input Blocks & Data Flow ---
     if isinstance(node, ast.Assign):
@@ -165,6 +189,17 @@ def match_sequence(statements: List[ast.AST], start_index: int, blocks_def: Dict
             
             # If literal, input_hex
             return [create_block("input_hex", {"hex_string": hex_str or ""}, f"hex_{id(node)}")], 1
+
+        # data = data.hex()
+        if isinstance(val, ast.Call) and isinstance(val.func, ast.Attribute) and val.func.attr == 'hex':
+            if isinstance(val.func.value, ast.Name) and val.func.value.id == 'data':
+                return [create_block("hex_encode", {}, f"hex_enc_{id(node)}")], 1
+
+        # data = base64.b64encode(data) / base64.b64decode(data)
+        if is_call_to(val, 'base64', 'b64encode'):
+            return [create_block("base64_encode", {}, f"b64_enc_{id(node)}")], 1
+        if is_call_to(val, 'base64', 'b64decode'):
+            return [create_block("base64_decode", {}, f"b64_dec_{id(node)}")], 1
 
         # data = '...'.encode(...) 
         if isinstance(val, ast.Call) and isinstance(val.func, ast.Attribute) and val.func.attr == 'encode':

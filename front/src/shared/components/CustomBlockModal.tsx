@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
-import { BlockDefinition, BlocksData } from '@/app/api';
+import { BlockDefinition, BlocksData } from '@/services/api';
 
 interface CustomBlockModalProps {
     isOpen: boolean;

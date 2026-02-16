@@ -6,13 +6,19 @@ import psutil
 
 def kill_process_on_port(port):
     """如果端口被占用，尝试杀掉占用端口的进程"""
-    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+    try:
+        connections = psutil.net_connections(kind='inet')
+    except Exception:
+        connections = []
+
+    for conn in connections:
+        if not conn.laddr or conn.laddr.port != port or not conn.pid:
+            continue
         try:
-            for conn in proc.net_connections(kind='inet'):
-                if conn.laddr.port == port:
-                    print(f"Port {port} is in use by {proc.info['name']} (PID: {proc.info['pid']}). Killing...")
-                    proc.kill()
-                    return
+            proc = psutil.Process(conn.pid)
+            print(f"Port {port} is in use by {proc.name()} (PID: {conn.pid}). Killing...")
+            proc.kill()
+            return
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             pass
 
@@ -25,10 +31,12 @@ def run():
     # 1. Start Backend
     print("启动后端服务...")
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    python_exe = os.path.join(base_dir, ".venv", "bin", "python")
+    if os.name == "nt":
+        venv_python = os.path.join(base_dir, ".venv", "Scripts", "python.exe")
+    else:
+        venv_python = os.path.join(base_dir, ".venv", "bin", "python")
 
-    if not os.path.exists(python_exe):
-        python_exe = sys.executable
+    python_exe = venv_python if os.path.exists(venv_python) else sys.executable
 
     backend_script = os.path.join(base_dir, "backend", "server.py")
     backend_proc = subprocess.Popen([python_exe, backend_script])
@@ -41,14 +49,24 @@ def run():
     # 2. Wait for servers to start
     time.sleep(2)
 
-    npm_cmd = "npm"
+    npm_cmd = "npm.cmd" if os.name == "nt" else "npm"
     front_dir = os.path.join(base_dir, "front")
+    node_modules_dir = os.path.join(front_dir, "node_modules")
     
     # 3. Build Frontend
     print("=" * 40)
     print(">>> ByteAlchemy <<<")
     print("=" * 40)
     print("构建前端...")
+
+    if not os.path.isdir(node_modules_dir):
+        print("检测到前端依赖未安装，正在执行 npm install...")
+        install_proc = subprocess.run([npm_cmd, "install"], cwd=front_dir)
+        if install_proc.returncode != 0:
+            print("前端依赖安装失败!")
+            backend_proc.terminate()
+            terminal_proc.terminate()
+            return
     
     build_proc = subprocess.run([npm_cmd, "run", "build"], cwd=front_dir)
     if build_proc.returncode != 0:

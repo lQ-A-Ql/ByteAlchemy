@@ -22,6 +22,7 @@ from app.logic.sbox_manager import SBoxManager
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from typing import Dict, Any, List
+from core.analysis.ida_pseudocode import analyze_ida_pseudocode
 
 sbox_manager = SBoxManager()
 
@@ -57,6 +58,9 @@ class ConvertRequest(BaseModel):
     from_fmt: str
     to_fmt: str
     separator: str = None
+
+class IdaAnalyzeRequest(BaseModel):
+    code: str
 
 @app.get("/")
 def read_root():
@@ -374,13 +378,16 @@ class Md5Request(BaseModel):
     k_table: Optional[str] = None  # JSON array of 64 values
     shifts: Optional[str] = None  # JSON array of 64 values
     data_type: Optional[str] = None
+    salt: Optional[str] = ''
+    salt_position: Optional[str] = 'suffix'
 
 @app.post("/api/md5/hash")
 def md5_hash(req: Md5Request):
     try:
         result = MD5Encoders.md5_hash(req.data, output_format=req.output_format,
                                       init_values=req.init_values, k_table=req.k_table,
-                                      shifts=req.shifts, data_type=req.data_type)
+                                      shifts=req.shifts, data_type=req.data_type,
+                                      salt=req.salt, salt_position=req.salt_position)
         return {"result": result}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -478,6 +485,14 @@ def endian_swap(req: ConvertRequest):
     try:
         result = logic.transform_endian(req.data, req.from_fmt, req.separator)
         return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/ida/analyze")
+def ida_analyze(req: IdaAnalyzeRequest):
+    try:
+        result = analyze_ida_pseudocode(req.code)
+        return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -619,9 +634,9 @@ def run_script_stream(script_id: str):
 # ==================== Key Reconstruction API ====================
 try:
     from importlib import import_module
-    key_recreat_blocks = import_module("core.key_recreat.blocks")
-    key_recreat_generator = import_module("core.key_recreat.generator")
-    key_recreat_custom = import_module("core.key_recreat.custom_blocks")
+    key_recreat_blocks = import_module("core.key_reconstruct.blocks")
+    key_recreat_generator = import_module("core.key_reconstruct.generator")
+    key_recreat_custom = import_module("core.key_reconstruct.custom_blocks")
 except ImportError as e:
     key_recreat_blocks = None
     key_recreat_generator = None
@@ -713,8 +728,8 @@ async def parse_key_code_endpoint(request: Request):
         if not code:
             return JSONResponse({"success": False, "error": "Code is empty"})
             
-        from core.key_recreat.blocks import get_all_blocks
-        from core.key_recreat.parser import parse_code_to_blocks
+        from core.key_reconstruct.blocks import get_all_blocks
+        from core.key_reconstruct.parser import parse_code_to_blocks
         
         blocks_def = get_all_blocks()["blocks"]
         chain = parse_code_to_blocks(code, blocks_def)

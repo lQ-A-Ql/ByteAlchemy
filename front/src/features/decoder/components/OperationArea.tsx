@@ -1,20 +1,19 @@
-import { Play, Copy, Check } from 'lucide-react';
-import { useState } from 'react';
-import { MiniSelect } from '../CustomSelect';
+import { Copy, Check, Upload } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { MiniSelect } from '@/shared/components/CustomSelect';
 
 interface OperationAreaProps {
   input: string;
   output: string;
   inputFormat: string;
   outputFormat: string;
-  isProcessing: boolean;
   onInputChange: (value: string) => void;
   onInputFormatChange: (format: string) => void;
   onOutputFormatChange: (format: string) => void;
-  onExecute: () => void;
 }
 
 const formatOptions = [
+  { value: 'AUTO', label: 'AUTO' },
   { value: 'UTF-8', label: 'UTF-8' },
   { value: 'HEX', label: 'HEX' },
   { value: 'ASCII', label: 'ASCII' },
@@ -25,18 +24,25 @@ export function OperationArea({
   output,
   inputFormat,
   outputFormat,
-  isProcessing,
   onInputChange,
   onInputFormatChange,
   onOutputFormatChange,
-  onExecute
 }: OperationAreaProps) {
   const [copied, setCopied] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const copyOutput = () => {
     navigator.clipboard.writeText(output);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const importHexFromFile = async (file: File) => {
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+    onInputChange(hex);
+    onInputFormatChange('HEX');
   };
 
   return (
@@ -52,6 +58,24 @@ export function OperationArea({
           <div className="mb-2 flex items-center justify-between">
             <label className="text-sm text-gray-600 font-medium">输入</label>
             <div className="flex items-center gap-2">
+              <input
+                ref={fileRef}
+                type="file"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  importHexFromFile(file);
+                  e.currentTarget.value = '';
+                }}
+              />
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="p-1.5 rounded-lg bg-white/70 ring-1 ring-blue-200 text-blue-600 hover:bg-blue-50"
+                title="从文件导入 HEX"
+              >
+                <Upload className="w-4 h-4" />
+              </button>
               <MiniSelect
                 value={inputFormat}
                 onChange={onInputFormatChange}
@@ -66,18 +90,6 @@ export function OperationArea({
             placeholder="在此输入需要处理的文本..."
             className="flex-1 w-full px-4 py-3 bg-white/60 border border-blue-200 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all text-sm font-mono"
           />
-        </div>
-
-        {/* Execute Button */}
-        <div className="flex-shrink-0 flex items-center justify-center py-1">
-          <button
-            onClick={onExecute}
-            disabled={isProcessing}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${isProcessing ? 'animate-pulse' : ''}`}
-          >
-            <Play className="w-4 h-4" fill="currentColor" />
-            {isProcessing ? '处理中...' : '执行'}
-          </button>
         </div>
 
         {/* Output Area */}

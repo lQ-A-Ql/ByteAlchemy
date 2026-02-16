@@ -1,11 +1,11 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Puzzle, Play, Copy, Check, Trash2, ChevronRight, ChevronDown, Plus, CornerDownRight, MoreHorizontal, ArrowLeft, RefreshCw } from 'lucide-react';
-import { getKeyBlocks, generateKeyCode, executeKeyCode, parseKeyCode, BlocksData, BlockDefinition } from '@/app/api';
-import { CodeEditor } from './CodeEditor';
-import { MiniSelect } from './CustomSelect';
-import { CustomBlockModal } from './CustomBlockModal';
-import { saveCustomBlock, deleteCustomBlock } from '@/app/api';
+import { getKeyBlocks, generateKeyCode, executeKeyCode, parseKeyCode, BlocksData, BlockDefinition } from '@/services/api';
+import { CodeEditor } from '@/shared/components/CodeEditor';
+import { MiniSelect } from '@/shared/components/CustomSelect';
+import { CustomBlockModal } from '@/shared/components/CustomBlockModal';
+import { saveCustomBlock, deleteCustomBlock } from '@/services/api';
 
 // 积木块实例
 interface BlockInstance {
@@ -32,14 +32,19 @@ export function KeyReconstructPage() {
         transform: false,
         bitwise: false,
         sbox: false,
+        ctypes: false,
         loop: false,
         function: false,
         variable: false,
+        custom: false,
     });
 
     const [copied, setCopied] = useState(false);
     const [isEditing, setIsEditing] = useState(false); // User is typing code manually
     const [isParsing, setIsParsing] = useState(false); // System is parsing code to blocks
+    const [blockSearch, setBlockSearch] = useState('');
+    const [templateName, setTemplateName] = useState('');
+    const [savedTemplates, setSavedTemplates] = useState<Array<{ id: string; name: string; blocks: any[] }>>([]);
 
     // Custom Block Modal
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -52,6 +57,53 @@ export function KeyReconstructPage() {
         id: null,
         position: 'after'
     });
+
+    const defaultTemplates = useMemo(() => ([
+        {
+            id: 'xor_reverse',
+            name: 'XOR + Reverse',
+            blocks: [
+                { block_id: 'input_hex', params: { hex_string: '00112233' } },
+                { block_id: 'xor_key', params: { key: 'DEADBEEF' } },
+                { block_id: 'reverse_bytes', params: {} },
+                { block_id: 'return_hex', params: { var_name: 'data' } },
+            ],
+        },
+        {
+            id: 'pbkdf2_chain',
+            name: 'PBKDF2 + SHA256',
+            blocks: [
+                { block_id: 'input_string', params: { text: 'password' } },
+                { block_id: 'pbkdf2_sha256', params: { salt_hex: '00112233', iterations: '1000', dklen: '32' } },
+                { block_id: 'return_hex', params: { var_name: 'data' } },
+            ],
+        },
+        {
+            id: 'crc32_chain',
+            name: 'CRC32 + Int->Hex',
+            blocks: [
+                { block_id: 'input_string', params: { text: 'Hello' } },
+                { block_id: 'crc32', params: {} },
+                { block_id: 'int_to_bytes', params: { length: '4', byteorder: 'big' } },
+                { block_id: 'hex_encode', params: {} },
+                { block_id: 'return_data', params: { var_name: 'data' } },
+            ],
+        },
+    ]), []);
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem('keyreconstruct_templates');
+            if (raw) setSavedTemplates(JSON.parse(raw));
+        } catch {
+            setSavedTemplates([]);
+        }
+    }, []);
+
+    const persistTemplates = (list: Array<{ id: string; name: string; blocks: any[] }>) => {
+        setSavedTemplates(list);
+        localStorage.setItem('keyreconstruct_templates', JSON.stringify(list));
+    };
 
     // 加载积木块定义
     const fetchBlocks = useCallback(() => {
@@ -203,6 +255,65 @@ export function KeyReconstructPage() {
         }
     };
 
+    const buildBlockInstance = (blockId: string, overrideParams?: Record<string, any>): BlockInstance | null => {
+        if (!blocksData) return null;
+        const blockDef = blocksData.blocks[blockId];
+        if (!blockDef) return null;
+        const params: Record<string, any> = {};
+        for (const param of blockDef.params) {
+            params[param.name] = param.default || '';
+        }
+        return {
+            id: `${blockId}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+            block_id: blockId,
+            params: { ...params, ...(overrideParams || {}) },
+            children: blockDef.is_container ? [] : undefined,
+        };
+    };
+
+    const applyTemplate = (templateId: string) => {
+        const template = [...defaultTemplates, ...savedTemplates].find((t) => t.id === templateId);
+        if (!template) return;
+        const buildTree = (nodes: any[]): BlockInstance[] =>
+            nodes
+                .map((b) => {
+                    const base = buildBlockInstance(b.block_id, b.params);
+                    if (!base) return null;
+                    if (b.children && b.children.length > 0) {
+                        base.children = buildTree(b.children);
+                    }
+                    return base;
+                })
+                .filter((b): b is BlockInstance => Boolean(b));
+
+        const newChain = buildTree(template.blocks);
+        setChain(newChain);
+        setSelection({ id: null, position: 'after' });
+        setIsEditing(false);
+    };
+
+    const serializeChain = (nodes: BlockInstance[]): any[] =>
+        nodes.map((b) => ({
+            block_id: b.block_id,
+            params: b.params,
+            children: b.children ? serializeChain(b.children) : undefined,
+        }));
+
+    const saveTemplate = () => {
+        if (!templateName.trim()) return;
+        const entry = {
+            id: `tpl_${Date.now()}`,
+            name: templateName.trim(),
+            blocks: serializeChain(chain),
+        };
+        persistTemplates([...savedTemplates, entry]);
+        setTemplateName('');
+    };
+
+    const deleteTemplate = (id: string) => {
+        persistTemplates(savedTemplates.filter((t) => t.id !== id));
+    };
+
     const deleteBlockRecursive = (list: BlockInstance[], id: string): BlockInstance[] => {
         return list.filter(b => b.id !== id).map(b => ({
             ...b,
@@ -350,6 +461,55 @@ export function KeyReconstructPage() {
                             <Plus className="w-3 h-3" /> 新建
                         </button>
                     </div>
+                    <div className="mb-2 space-y-2">
+                        <input
+                            value={blockSearch}
+                            onChange={(e) => setBlockSearch(e.target.value)}
+                            placeholder="搜索积木..."
+                            className="w-full px-2 py-1.5 text-xs bg-white/70 border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        />
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-gray-500">模板</span>
+                            <div className="flex-1">
+                                <MiniSelect
+                                    value={''}
+                                    onChange={(v) => applyTemplate(v)}
+                                    options={[...defaultTemplates, ...savedTemplates].map(t => ({ value: t.id, label: t.name }))}
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <input
+                                value={templateName}
+                                onChange={(e) => setTemplateName(e.target.value)}
+                                placeholder="保存当前为模板"
+                                className="flex-1 px-2 py-1.5 text-xs bg-white/70 border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                            />
+                            <button
+                                onClick={saveTemplate}
+                                disabled={!templateName.trim() || chain.length === 0}
+                                className="px-2 py-1.5 text-xs rounded-lg bg-indigo-500 text-white shadow hover:bg-indigo-600 disabled:opacity-40"
+                            >
+                                保存
+                            </button>
+                        </div>
+                        {savedTemplates.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-2 text-[10px] text-gray-500">
+                                {savedTemplates.map((t) => (
+                                    <span key={t.id} className="inline-flex items-center gap-1">
+                                        {t.name}
+                                        <button
+                                            onClick={() => deleteTemplate(t.id)}
+                                            className="text-[10px] text-rose-500 hover:text-rose-600"
+                                            title="删除模板"
+                                        >
+                                            删除
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                     <div className="flex-1 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
                         {Object.entries(blocksData.categories).map(([catId, cat]) => (
                             <div key={catId} className="select-none">
@@ -372,6 +532,7 @@ export function KeyReconstructPage() {
                                     <div className="ml-6 space-y-1 mt-1">
                                         {Object.entries(blocksData.blocks)
                                             .filter(([_, b]) => b.category === catId)
+                                            .filter(([_, b]) => !blockSearch || b.name.toLowerCase().includes(blockSearch.toLowerCase()))
                                             .map(([blockId, block]) => (
                                                 <button
                                                     key={blockId}
@@ -612,6 +773,16 @@ function BlockCard({ block, blocksData, selection, onSelect, onRemove, onUpdateP
                         <span className="text-xs font-bold" style={{ color: isRaw ? '#4B5563' : category.color }}>
                             {isRaw ? '自定义代码' : blockDef.name}
                         </span>
+                        {!isRaw && (blockDef.input || blockDef.output) && (
+                            <div className="flex items-center gap-1">
+                                {blockDef.input && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/70 text-gray-600 border border-gray-200">in: {blockDef.input}</span>
+                                )}
+                                {blockDef.output && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/70 text-gray-600 border border-gray-200">out: {blockDef.output}</span>
+                                )}
+                            </div>
+                        )}
 
                         {/* Parameters */}
                         {isRaw ? (

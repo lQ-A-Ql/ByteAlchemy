@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Plus, Play, Trash2, Edit3, Save, X, FileText, Terminal as TerminalIcon, Code, Send } from 'lucide-react';
-import { getScripts, getScript, createScript, updateScript, deleteScript, Script } from '@/app/api';
-import { XTermTerminal, runTerminalCommand } from './XTermTerminal';
-import { CodeEditor } from './CodeEditor';
+import { getScripts, getScript, createScript, updateScript, deleteScript, Script } from '@/services/api';
+import { XTermTerminal, runTerminalCommand, runTerminalInput } from '@/shared/components/XTermTerminal';
+import { CodeEditor } from '@/shared/components/CodeEditor';
 
 type RightTab = 'script' | 'terminal';
 
@@ -21,9 +21,21 @@ export function ScriptPage() {
     const [showRunDialog, setShowRunDialog] = useState(false);
     const [scriptParams, setScriptParams] = useState<{ label: string; value: string }[]>([]);
     const [manualInput, setManualInput] = useState('');
+    const [scriptArgs, setScriptArgs] = useState('');
+    const [scriptFilePath, setScriptFilePath] = useState('');
 
     useEffect(() => {
         loadScripts();
+    }, []);
+
+    useEffect(() => {
+        if ((window as any).__openTerminalOnMount) {
+            setActiveTab('terminal');
+            delete (window as any).__openTerminalOnMount;
+        }
+        const handler = () => setActiveTab('terminal');
+        window.addEventListener('open-terminal', handler);
+        return () => window.removeEventListener('open-terminal', handler);
     }, []);
 
     const loadScripts = async () => {
@@ -96,10 +108,20 @@ export function ScriptPage() {
 
         setScriptParams(params);
         setManualInput('');
+        setScriptArgs('');
+        setScriptFilePath('');
         setShowRunDialog(true);
     };
 
-    // Execute script with parameters via pipe
+    const quoteArg = (value: string) => {
+        if (!value) return value;
+        if (/[\s"]/g.test(value)) {
+            return `"${value.replace(/"/g, '\\"')}"`;
+        }
+        return value;
+    };
+
+    // Execute script with args and optional stdin
     const executeScript = () => {
         if (!selectedScript) return;
 
@@ -108,21 +130,29 @@ export function ScriptPage() {
 
         const scriptPath = `core/script/user_scripts/${selectedScript.id}.py`;
 
-        // Build input string
-        let inputString = '';
+        const args = scriptArgs.trim();
+        const fileArg = scriptFilePath.trim();
+        const cmdParts = [quoteArg(scriptPath)];
+        if (args) cmdParts.push(args);
+        if (fileArg) cmdParts.push(quoteArg(fileArg));
+        const command = `python ${cmdParts.join(' ')}`;
+
+        // Build stdin lines
+        let inputLines: string[] = [];
         if (scriptParams.length > 0) {
-            inputString = scriptParams.map(p => p.value).join('\\n');
+            inputLines = scriptParams.map(p => p.value);
         } else if (manualInput.trim()) {
-            inputString = manualInput.trim().replace(/\n/g, '\\n');
+            inputLines = manualInput.replace(/\r\n/g, '\n').split('\n');
         }
 
         setTimeout(() => {
-            if (inputString) {
-                // Use echo -e with pipe to pass inputs
-                const escapedInput = inputString.replace(/'/g, "'\\''");
-                runTerminalCommand(`echo -e '${escapedInput}' | python ${scriptPath}`);
-            } else {
-                runTerminalCommand(`python ${scriptPath}`);
+            runTerminalCommand(command);
+            if (inputLines.length > 0) {
+                setTimeout(() => {
+                    inputLines.forEach((line) => {
+                        runTerminalInput(`${line}\r\n`);
+                    });
+                }, 200);
             }
         }, 300);
     };
@@ -230,10 +260,10 @@ export function ScriptPage() {
 
                     {/* Tab Content */}
                     <div className="flex-1 min-h-0">
-                        {activeTab === 'terminal' ? (
+                        <div className={activeTab === 'terminal' ? 'h-full' : 'hidden'}>
                             <XTermTerminal />
-                        ) : (
-                            <div className="h-full bg-white/50 backdrop-blur-md rounded-2xl p-4 ring-1 ring-cyan-200 flex flex-col">
+                        </div>
+                        <div className={activeTab === 'script' ? 'h-full bg-white/50 backdrop-blur-md rounded-2xl p-4 ring-1 ring-cyan-200 flex flex-col' : 'hidden'}>
                                 {showNewForm ? (
                                     <div className="flex flex-col h-full">
                                         <h3 className="text-sm font-medium text-gray-800 mb-2">新建脚本</h3>
@@ -251,8 +281,8 @@ export function ScriptPage() {
                                             placeholder="描述 (可选)"
                                             className="w-full px-3 py-1.5 mb-2 bg-white/60 border border-cyan-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 text-sm"
                                         />
-                                        <div className="mb-2 flex-1">
-                                            <CodeEditor value={editContent} onChange={setEditContent} height="500px" />
+                                        <div className="mb-2 flex-1 min-h-0">
+                                            <CodeEditor value={editContent} onChange={setEditContent} height="100%" />
                                         </div>
                                         <div className="flex gap-2">
                                             <button onClick={handleCreate} className="flex-1 px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-500 text-white font-medium text-sm shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-1">
@@ -283,8 +313,8 @@ export function ScriptPage() {
                                                         className="flex-[2] px-3 py-1.5 bg-white/60 border border-cyan-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 text-sm"
                                                     />
                                                 </div>
-                                                <div className="mb-2 flex-1">
-                                                    <CodeEditor value={editContent} onChange={setEditContent} height="500px" />
+                                                <div className="mb-2 flex-1 min-h-0">
+                                                    <CodeEditor value={editContent} onChange={setEditContent} height="100%" />
                                                 </div>
                                                 <div className="flex justify-end gap-2">
                                                     <button onClick={resetForm} className="px-4 py-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-all flex items-center gap-1 text-sm">
@@ -315,8 +345,8 @@ export function ScriptPage() {
                                                         </button>
                                                     </div>
                                                 </div>
-                                                <div className="flex-1">
-                                                    <CodeEditor value={selectedScript.content || ''} onChange={() => { }} readOnly height="500px" />
+                                                <div className="flex-1 min-h-0">
+                                                    <CodeEditor value={selectedScript.content || ''} onChange={() => { }} readOnly height="100%" />
                                                 </div>
                                             </>
                                         )}
@@ -330,7 +360,6 @@ export function ScriptPage() {
                                     </div>
                                 )}
                             </div>
-                        )}
                     </div>
                 </div>
             </div>
@@ -369,7 +398,7 @@ export function ScriptPage() {
                                     </div>
                                 ))}
                                 <div className="px-3 py-2 bg-cyan-50 rounded-lg text-xs text-cyan-700">
-                                    参数将通过管道自动传递给脚本
+                                    参数将通过标准输入发送给脚本
                                 </div>
                             </div>
                         ) : (
@@ -386,6 +415,32 @@ export function ScriptPage() {
                                 </div>
                             </div>
                         )}
+
+                        <div className="space-y-3 mb-4">
+                            <div>
+                                <label className="text-sm text-gray-700 mb-1 block">命令行参数</label>
+                                <input
+                                    type="text"
+                                    value={scriptArgs}
+                                    onChange={(e) => setScriptArgs(e.target.value)}
+                                    placeholder="例如: -a 1 -b 2"
+                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 font-mono text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-sm text-gray-700 mb-1 block">文件路径 (可选)</label>
+                                <input
+                                    type="text"
+                                    value={scriptFilePath}
+                                    onChange={(e) => setScriptFilePath(e.target.value)}
+                                    placeholder="例如: C:\\path\\to\\input.bin"
+                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 font-mono text-sm"
+                                />
+                            </div>
+                            <div className="px-3 py-2 bg-slate-50 rounded-lg text-xs text-slate-700">
+                                执行方式: python script.py [args] [file]
+                            </div>
+                        </div>
 
                         <div className="flex gap-2">
                             <button

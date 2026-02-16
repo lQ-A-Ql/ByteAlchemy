@@ -1,9 +1,10 @@
-import { Binary, Code2, Regex, ScrollText, Settings, Puzzle } from 'lucide-react';
+import { Binary, Code2, Regex, ScrollText, Settings, Puzzle, Wrench } from 'lucide-react';
 import logoImg from '../../assets/logo.png';
 
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  logoSrc?: string;
 }
 
 const menuItems = [
@@ -12,10 +13,11 @@ const menuItems = [
   { id: 'regex', icon: Regex, label: '正则转换', accent: 'from-blue-400 via-indigo-400 to-blue-500' },
   { id: 'script', icon: ScrollText, label: '脚本库', accent: 'from-cyan-400 via-teal-400 to-cyan-500' },
   { id: 'keyreconstruct', icon: Puzzle, label: '密钥重构', accent: 'from-indigo-400 via-purple-400 to-indigo-500' },
+  { id: 'toolbox', icon: Wrench, label: '工具箱', accent: 'from-amber-400 via-orange-400 to-amber-500' },
   { id: 'settings', icon: Settings, label: '设置', accent: 'from-gray-400 via-slate-400 to-gray-500' },
 ];
 
-export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
+export function Sidebar({ activeTab, onTabChange, logoSrc }: SidebarProps) {
   return (
     <aside className="w-24 bg-white/70 backdrop-blur-md shadow-2xl flex flex-col items-center py-8 border-r border-pink-100/60 relative overflow-hidden z-10">
       {/* Decorative Background Elements */}
@@ -25,7 +27,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       {/* Logo */}
       <div className="relative mb-12 group cursor-pointer">
         <div className="w-14 h-14 rounded-2xl overflow-hidden shadow-xl transform transition-all duration-500 group-hover:scale-110 group-hover:rotate-3">
-          <img src={logoImg} alt="Logo" className="w-full h-full object-cover" />
+          <img src={logoSrc || logoImg} alt="Logo" className="w-full h-full object-cover" />
         </div>
         <div className="absolute -inset-1 bg-gradient-to-br from-pink-400 to-purple-500 rounded-2xl opacity-20 blur-md group-hover:opacity-40 transition-opacity"></div>
       </div>

@@ -200,3 +200,19 @@ export async function deleteCustomBlock(blockId: string): Promise<boolean> {
   return result.success;
 }
 
+// ==================== IDA Analyzer API ====================
+export interface IdaAnalyzeResult {
+  summary: string;
+  matches: Array<{
+    name: string;
+    confidence: number;
+    evidence: string[];
+    notes: string[];
+  }>;
+  notes: string[];
+}
+
+export async function analyzeIdaPseudocode(code: string): Promise<IdaAnalyzeResult> {
+  return apiRequest('/api/ida/analyze', 'POST', { code });
+}
+

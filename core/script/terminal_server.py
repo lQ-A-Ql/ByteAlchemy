@@ -1,6 +1,6 @@
 """
-Terminal Server - WebSocket PTY Terminal
-提供完整的交互式终端功能 (Linux/macOS)
+Terminal Server - WebSocket Terminal
+提供完整的交互式终端功能 (Unix PTY / Windows subprocess)
 """
 
 import asyncio
@@ -8,24 +8,32 @@ import os
 import sys
 import signal
 import struct
-import pty
-import fcntl
-import termios
-import select
+import subprocess
+import threading
+import queue
+import time
 import websockets
 from websockets.exceptions import ConnectionClosed
 
+IS_WINDOWS = os.name == "nt"
 
-class TerminalSession:
+if not IS_WINDOWS:
+    import pty
+    import fcntl
+    import termios
+    import select
+
+
+class UnixTerminalSession:
     """Unix 终端会话 (Linux/macOS)"""
     
-    def __init__(self, shell: str = "/bin/bash"):
-        self.shell = shell
+    def __init__(self, shell: str = None):
+        self.shell = shell or os.environ.get("SHELL", "/bin/bash")
         self.fd = None
         self.pid = None
         self.running = False
     
-    def start(self, rows: int = 24, cols: int = 80):
+    def start(self, rows: int = 24, cols: int = 80, cwd: str = None):
         """启动PTY会话"""
         self.stop()
         
@@ -33,6 +41,11 @@ class TerminalSession:
         
         if self.pid == 0:
             # 子进程 - 执行shell
+            if cwd:
+                try:
+                    os.chdir(cwd)
+                except OSError:
+                    pass
             os.environ['TERM'] = 'xterm-256color'
             os.environ['COLORTERM'] = 'truecolor'
             os.execvp(self.shell, [self.shell])
@@ -93,6 +106,96 @@ class TerminalSession:
             self.fd = None
 
 
+class WindowsTerminalSession:
+    """Windows 终端会话 (subprocess)"""
+    
+    def __init__(self, shell: str = None):
+        self.shell = shell or os.environ.get("COMSPEC", "cmd.exe")
+        self.proc = None
+        self.running = False
+        self._queue = queue.Queue()
+        self._reader_thread = None
+    
+    def start(self, rows: int = 24, cols: int = 80, cwd: str = None):
+        """启动子进程会话 (无PTY)"""
+        self.stop()
+        try:
+            self.proc = subprocess.Popen(
+                [self.shell],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                cwd=cwd,
+                text=False,
+                bufsize=0
+            )
+        except FileNotFoundError:
+            self.proc = None
+            self.running = False
+            return
+        
+        self.running = True
+        self._reader_thread = threading.Thread(target=self._read_loop, daemon=True)
+        self._reader_thread.start()
+    
+    def _read_loop(self):
+        if not self.proc or not self.proc.stdout:
+            return
+        try:
+            while self.running:
+                chunk = self.proc.stdout.read(1)
+                if not chunk:
+                    break
+                self._queue.put(chunk)
+        except Exception:
+            pass
+        finally:
+            self.running = False
+    
+    def resize(self, rows: int, cols: int):
+        """Windows 子进程无PTY，忽略resize"""
+        return
+    
+    def write(self, data: str):
+        """向终端写入数据"""
+        if self.proc and self.proc.stdin and self.running:
+            try:
+                self.proc.stdin.write(data.encode('utf-8'))
+                self.proc.stdin.flush()
+            except OSError:
+                self.running = False
+    
+    def read(self, timeout: float = 0.1) -> str:
+        """读取终端输出"""
+        if not self.running:
+            return ""
+        
+        chunks = []
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            try:
+                chunks.append(self._queue.get_nowait())
+            except queue.Empty:
+                time.sleep(0.01)
+                continue
+        if not chunks:
+            return ""
+        return b"".join(chunks).decode('utf-8', errors='replace')
+    
+    def stop(self):
+        """停止终端会话"""
+        self.running = False
+        if self.proc:
+            try:
+                self.proc.terminate()
+            except OSError:
+                pass
+            self.proc = None
+
+
+TerminalSession = WindowsTerminalSession if IS_WINDOWS else UnixTerminalSession
+
+
 class TerminalServer:
     """WebSocket终端服务器"""
     
@@ -129,7 +232,8 @@ class TerminalServer:
                 return
             
             # 发送欢迎消息
-            await websocket.send("\033[1;32m[Terminal Ready - Unix]\033[0m\r\n")
+            platform_label = "Windows" if IS_WINDOWS else "Unix"
+            await websocket.send(f"\033[1;32m[Terminal Ready - {platform_label}]\033[0m\r\n")
             
             # 启动读取任务
             read_task = asyncio.create_task(self._read_loop(websocket, session))
@@ -191,7 +295,7 @@ class TerminalServer:
     async def start(self):
         """启动WebSocket服务器"""
         print(f"Terminal WebSocket server starting on ws://{self.host}:{self.port}")
-        print("Platform: Unix")
+        print("Platform: Windows" if IS_WINDOWS else "Platform: Unix")
         async with websockets.serve(
             self.handle_client, 
             self.host, 

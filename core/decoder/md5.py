@@ -170,7 +170,8 @@ class MD5Encoders:
     @staticmethod
     def md5_hash(data: str, output_format: str = 'hex',
                  init_values=None, k_table=None, shifts=None,
-                 data_type: str = None) -> str:
+                 data_type: str = None,
+                 salt: str = '', salt_position: str = 'suffix') -> str:
         """计算MD5哈希
         
         Args:
@@ -180,6 +181,8 @@ class MD5Encoders:
             k_table: 自定义K常量表 (64个)
             shifts: 自定义位移量 (64个)
             data_type: 输入数据类型 (hex/utf-8)
+            salt: 盐值 (UTF-8)
+            salt_position: 盐位置 (prefix/suffix/both)
         """
         if not data:
             return ""
@@ -200,6 +203,17 @@ class MD5Encoders:
         else:
             data_bytes = data.encode('utf-8')
         
+        # Salt handling (UTF-8)
+        if salt:
+            salt_bytes = salt.encode('utf-8')
+            pos = (salt_position or 'suffix').lower()
+            if pos == 'prefix':
+                data_bytes = salt_bytes + data_bytes
+            elif pos == 'both':
+                data_bytes = salt_bytes + data_bytes + salt_bytes
+            else:
+                data_bytes = data_bytes + salt_bytes
+
         # 计算哈希
         hash_bytes = md5._md5_hash(data_bytes)
         

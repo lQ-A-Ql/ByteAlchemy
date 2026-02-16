@@ -10,7 +10,7 @@ interface CodeEditorProps {
 
 export function CodeEditor({ value, onChange, readOnly = false, height = '600px', wordWrap = 'on' }: CodeEditorProps) {
     return (
-        <div className="rounded-lg overflow-hidden border border-cyan-200 bg-white h-full">
+        <div className="rounded-2xl overflow-hidden border border-cyan-200/70 bg-gradient-to-br from-white via-cyan-50/40 to-white shadow-lg ring-1 ring-cyan-100 h-full">
             <Editor
                 height={height}
                 defaultLanguage="python"
@@ -34,7 +34,7 @@ export function CodeEditor({ value, onChange, readOnly = false, height = '600px'
                     formatOnType: true,
                     suggestOnTriggerCharacters: true,
                     quickSuggestions: true,
-                    padding: { top: 8, bottom: 8 },
+                    padding: { top: 12, bottom: 12 },
                 }}
             />
         </div>

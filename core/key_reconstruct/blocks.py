@@ -105,6 +105,32 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
     },
 
     # ========== CTypes / Libc 类 [NEW] ==========
+    "hex_encode": {
+        "name": "Hex编码",
+        "category": "transform",
+        "params": [],
+        "code": "data = data.hex()",
+        "input": "bytes",
+        "output": "text",
+    },
+    "base64_encode": {
+        "name": "Base64编码",
+        "category": "transform",
+        "params": [],
+        "code": "import base64\ndata = base64.b64encode(data).decode('utf-8')",
+        "imports": ["base64"],
+        "input": "bytes",
+        "output": "text",
+    },
+    "base64_decode": {
+        "name": "Base64解码",
+        "category": "transform",
+        "params": [],
+        "code": "import base64\ndata = base64.b64decode(data)",
+        "imports": ["base64"],
+        "input": "text",
+        "output": "bytes",
+    },
     "ctypes_load_library": {
         "name": "加载动态库 (CDLL)",
         "category": "ctypes",
@@ -114,6 +140,15 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         ],
         "code": "import ctypes\n{var_name} = ctypes.CDLL(\"{lib_name}\")",
         "imports": ["ctypes"],
+    "hash_sha1": {
+        "name": "SHA1哈希",
+        "category": "crypto",
+        "params": [],
+        "code": "import hashlib\ndata = hashlib.sha1(data).digest()",
+        "imports": ["hashlib"],
+        "input": "bytes",
+        "output": "bytes",
+    },
     },
     "int_from_bytes": {
         "name": "Bytes转Int",
@@ -123,6 +158,57 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
         ],
         "code": "data = int.from_bytes(data, byteorder='{byteorder}')",
         "input": "bytes",
+    "hash_sha512": {
+        "name": "SHA512哈希",
+        "category": "crypto",
+        "params": [],
+        "code": "import hashlib\ndata = hashlib.sha512(data).digest()",
+        "imports": ["hashlib"],
+        "input": "bytes",
+        "output": "bytes",
+    },
+    "hmac_sha256": {
+        "name": "HMAC-SHA256",
+        "category": "crypto",
+        "params": [
+            {"name": "key_hex", "type": "hex", "label": "Key(Hex)", "default": "00112233"}
+        ],
+        "code": "import hmac, hashlib\nkey = bytes.fromhex('{key_hex}')\ndata = hmac.new(key, data, hashlib.sha256).digest()",
+        "imports": ["hmac", "hashlib"],
+        "input": "bytes",
+        "output": "bytes",
+    },
+    "pbkdf2_sha256": {
+        "name": "PBKDF2-SHA256",
+        "category": "crypto",
+        "params": [
+            {"name": "salt_hex", "type": "hex", "label": "Salt(Hex)", "default": "00112233"},
+            {"name": "iterations", "type": "number", "label": "迭代", "default": "1000"},
+            {"name": "dklen", "type": "number", "label": "长度", "default": "32"}
+        ],
+        "code": "import hashlib\nsalt = bytes.fromhex('{salt_hex}')\ndata = hashlib.pbkdf2_hmac('sha256', data, salt, {iterations}, dklen={dklen})",
+        "imports": ["hashlib"],
+        "input": "bytes",
+        "output": "bytes",
+    },
+    "crc32": {
+        "name": "CRC32",
+        "category": "crypto",
+        "params": [],
+        "code": "import zlib\ndata = zlib.crc32(data) & 0xFFFFFFFF",
+        "imports": ["zlib"],
+        "input": "bytes",
+        "output": "int",
+    },
+    "adler32": {
+        "name": "Adler32",
+        "category": "crypto",
+        "params": [],
+        "code": "import zlib\ndata = zlib.adler32(data) & 0xFFFFFFFF",
+        "imports": ["zlib"],
+        "input": "bytes",
+        "output": "int",
+    },
         "output": "int",
     },
     "libc_srand": {
@@ -133,6 +219,17 @@ BLOCKS: Dict[str, Dict[str, Any]] = {
              {"name": "seed", "type": "text", "label": "种子变量", "default": "data"}
         ],
         "code": "{lib_var}.srand({seed})",
+    "int_to_bytes": {
+        "name": "Int转Bytes",
+        "category": "ctypes",
+        "params": [
+            {"name": "length", "type": "number", "label": "长度", "default": "4"},
+            {"name": "byteorder", "type": "text", "label": "字节序", "default": "big"}
+        ],
+        "code": "data = int(data).to_bytes({length}, byteorder='{byteorder}', signed=False)",
+        "input": "int",
+        "output": "bytes",
+    },
     },
     "libc_rand": {
         "name": "libc.rand",

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { ChevronDown, Palette, Database, Check, Plus, Copy, Trash2, Upload, X, Info } from 'lucide-react';
+import { ChevronDown, Palette, Database, Check, Plus, Copy, Trash2, Upload, X, Info, Wrench, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getSBoxNames, getSBox, saveSBox, deleteSBox } from '@/app/api';
+import { getSBoxNames, getSBox, saveSBox, deleteSBox } from '@/services/api';
 
 interface SettingItem {
   id: string;
@@ -19,6 +19,8 @@ export function SettingsPage() {
 
   const settings: SettingItem[] = [
     { id: 'sbox', title: 'S-Box 配置', icon: Database, content: <SBoxSettings /> },
+    { id: 'tools', title: '工具路径', icon: Wrench, content: <ToolPathSettings /> },
+    { id: 'logo', title: 'Logo 设置', icon: ImageIcon, content: <LogoSettings /> },
     { id: 'theme', title: '主题设置', icon: Palette, content: <ThemeSettings /> },
     { id: 'about', title: '关于', icon: Info, content: <AboutSection /> },
   ];
@@ -360,6 +362,139 @@ function AboutSection() {
         <div className="p-4 bg-white/60 rounded-xl">
           <div className="text-gray-500">状态</div>
           <div className="font-medium text-green-600">运行中</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ToolPathSettings() {
+  const [hashcatPath, setHashcatPath] = useState('');
+  const [johnPath, setJohnPath] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setHashcatPath(localStorage.getItem('tool_path_hashcat') || '');
+    setJohnPath(localStorage.getItem('tool_path_john') || '');
+  }, []);
+
+  const isWindows = () => /Win/i.test(navigator.platform || navigator.userAgent);
+  const isValidPath = (value: string) => {
+    const v = value.trim();
+    if (!v) return true;
+    if (!v.includes('/') && !v.includes('\\')) return true; // Command in PATH
+    if (isWindows()) return /^[A-Za-z]:\\.+/.test(v);
+    return /^\/.+/.test(v);
+  };
+
+  const handleSave = () => {
+    if (!isValidPath(hashcatPath) || !isValidPath(johnPath)) {
+      setError('路径格式不合法：Windows 需为 X:\\XXX\\XXX；Linux 需为 /xxx/xxx/xxx；或留空/只写命令名');
+      return;
+    }
+    setError(null);
+    localStorage.setItem('tool_path_hashcat', hashcatPath.trim());
+    localStorage.setItem('tool_path_john', johnPath.trim());
+    window.dispatchEvent(new Event('tool-paths-update'));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  };
+
+  return (
+    <div className="pt-6 space-y-4">
+      <div className="text-sm text-gray-600">
+        配置外部工具路径，用于工具箱中的一键命令生成。
+      </div>
+      {error && <div className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
+      <div className="space-y-3">
+        <div>
+          <label className="text-sm text-gray-700 mb-1 block">Hashcat 路径</label>
+          <input
+            type="text"
+            value={hashcatPath}
+            onChange={(e) => setHashcatPath(e.target.value)}
+            placeholder="例如: C:\\Tools\\hashcat\\hashcat.exe"
+            className="w-full px-3 py-2 bg-white/60 border border-gray-200 rounded-lg text-sm"
+          />
+          {!isValidPath(hashcatPath) && (
+            <div className="text-xs text-red-500 mt-1">路径格式不正确</div>
+          )}
+        </div>
+        <div>
+          <label className="text-sm text-gray-700 mb-1 block">John 路径</label>
+          <input
+            type="text"
+            value={johnPath}
+            onChange={(e) => setJohnPath(e.target.value)}
+            placeholder="例如: C:\\Tools\\john\\john.exe"
+            className="w-full px-3 py-2 bg-white/60 border border-gray-200 rounded-lg text-sm"
+          />
+          {!isValidPath(johnPath) && (
+            <div className="text-xs text-red-500 mt-1">路径格式不正确</div>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleSave}
+          className="px-4 py-2 rounded-lg bg-slate-600 text-white hover:bg-slate-700 transition-all"
+        >
+          保存路径
+        </button>
+        {saved && <span className="text-sm text-green-600">已保存</span>}
+      </div>
+    </div>
+  );
+}
+
+function LogoSettings() {
+  const [logo, setLogo] = useState('');
+
+  useEffect(() => {
+    setLogo(localStorage.getItem('app_logo_image') || '');
+  }, []);
+
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      alert('图片大小不能超过 3MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string;
+      setLogo(result);
+      localStorage.setItem('app_logo_image', result);
+      window.dispatchEvent(new Event('logo-update'));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearLogo = () => {
+    setLogo('');
+    localStorage.removeItem('app_logo_image');
+    window.dispatchEvent(new Event('logo-update'));
+  };
+
+  return (
+    <div className="pt-6 space-y-4">
+      <div className="text-sm text-gray-600">自定义左上角 Logo（支持 PNG/JPG）</div>
+      <div className="flex items-center gap-4">
+        <label className="w-20 h-20 rounded-2xl border-2 border-dashed border-gray-300 hover:border-amber-400 transition-colors cursor-pointer flex items-center justify-center overflow-hidden">
+          {logo ? (
+            <img src={logo} className="w-full h-full object-cover" />
+          ) : (
+            <Upload className="w-6 h-6 text-gray-400" />
+          )}
+          <input type="file" accept="image/*" onChange={handleUpload} className="hidden" />
+        </label>
+        <div className="text-sm text-gray-500">
+          <p>点击上传图片 (最大 3MB)</p>
+          {logo && (
+            <button onClick={clearLogo} className="text-red-500 hover:underline mt-1">清除 Logo</button>
+          )}
         </div>
       </div>
     </div>

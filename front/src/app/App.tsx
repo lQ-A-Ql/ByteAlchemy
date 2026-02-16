@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Sidebar } from '@/app/components/Sidebar';
-import { MainContent } from '@/app/components/MainContent';
+import { Sidebar } from '@/shared/components/Sidebar';
+import { MainContent } from '@/app/MainContent';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('decoder');
   const [bgImage, setBgImage] = useState('');
   const [bgOpacity, setBgOpacity] = useState(0.3);
+  const [logoImage, setLogoImage] = useState('');
 
   // Load global wallpaper from localStorage
   useEffect(() => {
@@ -24,6 +25,26 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleOpenTerminal = () => setActiveTab('script');
+    window.addEventListener('open-terminal', handleOpenTerminal);
+    return () => window.removeEventListener('open-terminal', handleOpenTerminal);
+  }, []);
+
+  useEffect(() => {
+    const loadLogo = () => {
+      setLogoImage(localStorage.getItem('app_logo_image') || '');
+    };
+    loadLogo();
+    window.addEventListener('storage', loadLogo);
+    const handleUpdate = () => loadLogo();
+    window.addEventListener('logo-update', handleUpdate);
+    return () => {
+      window.removeEventListener('storage', loadLogo);
+      window.removeEventListener('logo-update', handleUpdate);
+    };
+  }, []);
+
   return (
     <div className="size-full flex bg-gradient-to-br from-white via-pink-50 to-purple-50 relative">
       {/* Global Wallpaper */}
@@ -38,7 +59,7 @@ export default function App() {
           }}
         />
       )}
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} logoSrc={logoImage} />
       <MainContent activeTab={activeTab} />
     </div>
   );

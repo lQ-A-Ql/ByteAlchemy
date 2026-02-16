@@ -1,9 +1,10 @@
-import { DecoderPage } from '@/app/components/DecoderPage';
-import { FormatterPage } from '@/app/components/FormatterPage';
-import { RegexPage } from '@/app/components/RegexPage';
-import { ScriptPage } from '@/app/components/ScriptPage';
-import { SettingsPage } from '@/app/components/SettingsPage';
-import { KeyReconstructPage } from '@/app/components/KeyReconstructPage';
+import { DecoderPage } from '@/features/decoder/DecoderPage';
+import { FormatterPage } from '@/features/formatter/FormatterPage';
+import { RegexPage } from '@/features/regex/RegexPage';
+import { ScriptPage } from '@/features/script/ScriptPage';
+import { SettingsPage } from '@/features/settings/SettingsPage';
+import { KeyReconstructPage } from '@/features/key-reconstruct/KeyReconstructPage';
+import { ToolboxPage } from '@/features/toolbox/ToolboxPage';
 
 interface MainContentProps {
   activeTab: string;
@@ -22,6 +23,8 @@ export function MainContent({ activeTab }: MainContentProps) {
         return <ScriptPage />;
       case 'keyreconstruct':
         return <KeyReconstructPage />;
+      case 'toolbox':
+        return <ToolboxPage />;
       case 'settings':
         return <SettingsPage />;
       default:

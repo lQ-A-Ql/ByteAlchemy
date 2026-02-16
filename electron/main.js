@@ -50,10 +50,13 @@ function startBackend() {
 
     let backendExecutable
     let args = []
+    const isWindows = process.platform === 'win32'
 
     if (isDev) {
         // Development mode: Run from script using virtual environment
-        const venvPythonPath = path.join(__dirname, '../.venv/bin/python')
+        const venvPythonPath = isWindows
+            ? path.join(__dirname, '../.venv/Scripts/python.exe')
+            : path.join(__dirname, '../.venv/bin/python')
 
         // Fallback to system Python if venv doesn't exist
         let pythonPath
@@ -61,7 +64,7 @@ function startBackend() {
             pythonPath = venvPythonPath
             console.log(`Using venv Python: ${pythonPath}`)
         } else {
-            pythonPath = 'python3'
+            pythonPath = isWindows ? 'python' : 'python3'
             console.log(`Venv not found, using system Python: ${pythonPath}`)
         }
 
@@ -72,7 +75,8 @@ function startBackend() {
     } else {
         // Packaged mode: Run the bundled executable
         // The binary is placed in resources/backend-server/backend-server
-        backendExecutable = path.join(process.resourcesPath, 'backend-server/backend-server')
+        const exeName = isWindows ? 'backend-server.exe' : 'backend-server'
+        backendExecutable = path.join(process.resourcesPath, 'backend-server', exeName)
         console.log(`Packaged mode detected. Using executable: ${backendExecutable}`)
     }
 

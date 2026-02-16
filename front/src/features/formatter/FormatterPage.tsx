@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { FileJson, Wand2 } from 'lucide-react';
-import { formatCode } from '@/app/api';
+import { formatCode } from '@/services/api';
 
 const formatOptions = [
     { value: 'json', label: 'JSON', icon: '📦' },

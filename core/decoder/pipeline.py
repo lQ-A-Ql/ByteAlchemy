@@ -3,6 +3,8 @@
 混合编码操作链接口，支持多步编码/解码。
 """
 from typing import List, Callable, Dict, Any
+import base64
+import hashlib
 
 class Operation:
     def __init__(self, name: str, func: Callable[[str, Dict[str, Any]], str], params: Dict[str, Any] = None):
@@ -196,6 +198,53 @@ def sm4_decrypt(data, params):
 # GUI 可通过 OPERATION_REGISTRY.keys() 获取所有操作名
 # 并通过 Pipeline 组合操作链
 
+# XOR (magic) helper
+@register_operation('xor_bytes')
+def xor_bytes(data, params):
+    if data is None:
+        return ""
+
+    key = params.get('key', '')
+    key_type = params.get('key_type', 'hex')
+    data_type = params.get('data_type', 'hex')
+    output_format = params.get('output_format', 'hex')
+
+    if not key:
+        return data
+
+    if key_type.lower() == 'hex':
+        try:
+            key_bytes = bytes.fromhex(key.replace(' ', '').replace('\n', ''))
+        except Exception as e:
+            raise ValueError(f"XOR Key 不是有效的Hex字符串: {str(e)}")
+    else:
+        key_bytes = key.encode('utf-8')
+
+    if not key_bytes:
+        raise ValueError("XOR Key 不能为空")
+
+    if data_type.lower() == 'hex':
+        try:
+            data_bytes = bytes.fromhex(data.replace(' ', '').replace('\n', ''))
+        except Exception as e:
+            raise ValueError(f"输入数据不是有效的Hex字符串: {str(e)}")
+    else:
+        data_bytes = data.encode('utf-8')
+
+    result = bytes([b ^ key_bytes[i % len(key_bytes)] for i, b in enumerate(data_bytes)])
+
+    if output_format.lower() == 'hex':
+        return result.hex()
+    try:
+        return result.decode('utf-8')
+    except Exception:
+        return result.hex()
+
+
+@register_operation('known_plaintext_helper')
+def known_plaintext_helper(data, params):
+    return data
+
 # DES/3DES加解密
 from core.decoder.des import DESEncoders
 
@@ -261,6 +310,7 @@ def triple_des_decrypt(data, params):
 
 # MD5哈希
 from core.decoder.md5 import MD5Encoders
+from core.decoder.extra_ciphers import ExtraCiphers
 
 @register_operation('md5_hash')
 def md5_hash(data, params):
@@ -269,10 +319,62 @@ def md5_hash(data, params):
     k_table = params.get('k_table')
     shifts = params.get('shifts')
     val_data_type = params.get('data_type')
+    salt = params.get('salt', '')
+    salt_position = params.get('salt_position', 'suffix')
     
     return MD5Encoders.md5_hash(data, output_format=output_format,
                                 init_values=init_values, k_table=k_table,
-                                shifts=shifts, data_type=val_data_type)
+                                shifts=shifts, data_type=val_data_type,
+                                salt=salt, salt_position=salt_position)
+
+
+def _hash_with_salt(data, algorithm, params):
+    output_format = params.get('output_format', 'hex')
+    val_data_type = params.get('data_type')
+    salt = params.get('salt', '')
+    salt_position = params.get('salt_position', 'suffix')
+
+    if not data:
+        return ""
+
+    if val_data_type and val_data_type.lower() == 'hex':
+        try:
+            data_bytes = bytes.fromhex(data.replace(' ', '').replace('\n', ''))
+        except Exception as exc:
+            raise ValueError("输入数据不是有效的Hex字符串") from exc
+    else:
+        data_bytes = data.encode('utf-8')
+
+    if salt:
+        salt_bytes = salt.encode('utf-8')
+        pos = (salt_position or 'suffix').lower()
+        if pos == 'prefix':
+            data_bytes = salt_bytes + data_bytes
+        elif pos == 'both':
+            data_bytes = salt_bytes + data_bytes + salt_bytes
+        else:
+            data_bytes = data_bytes + salt_bytes
+
+    h = hashlib.new(algorithm)
+    h.update(data_bytes)
+    if output_format.lower() == 'base64':
+        return base64.b64encode(h.digest()).decode('utf-8')
+    return h.hexdigest()
+
+
+@register_operation('sha1_hash')
+def sha1_hash(data, params):
+    return _hash_with_salt(data, 'sha1', params)
+
+
+@register_operation('sha256_hash')
+def sha256_hash(data, params):
+    return _hash_with_salt(data, 'sha256', params)
+
+
+@register_operation('sha512_hash')
+def sha512_hash(data, params):
+    return _hash_with_salt(data, 'sha512', params)
 
 # RC4流密码
 from core.decoder.rc4 import RC4Encoders
@@ -298,3 +400,137 @@ def rc4_decrypt(data, params):
     
     return RC4Encoders.rc4_decrypt(data, key, swap_bytes=swap_bytes, sbox=sbox,
                                    key_type=val_key_type, data_type=val_data_type)
+
+
+# Extra block ciphers
+@register_operation('blowfish_encrypt')
+def blowfish_encrypt(data, params):
+    return ExtraCiphers.blowfish_encrypt(
+        data,
+        params.get('key', ''),
+        params.get('mode', 'ECB'),
+        params.get('iv', ''),
+        params.get('padding', 'pkcs7'),
+        params.get('key_type', 'utf-8'),
+        params.get('iv_type', 'utf-8'),
+        params.get('data_type')
+    )
+
+
+@register_operation('blowfish_decrypt')
+def blowfish_decrypt(data, params):
+    return ExtraCiphers.blowfish_decrypt(
+        data,
+        params.get('key', ''),
+        params.get('mode', 'ECB'),
+        params.get('iv', ''),
+        params.get('padding', 'pkcs7'),
+        params.get('key_type', 'utf-8'),
+        params.get('iv_type', 'utf-8'),
+        params.get('data_type')
+    )
+
+
+@register_operation('cast_encrypt')
+def cast_encrypt(data, params):
+    return ExtraCiphers.cast_encrypt(
+        data,
+        params.get('key', ''),
+        params.get('mode', 'ECB'),
+        params.get('iv', ''),
+        params.get('padding', 'pkcs7'),
+        params.get('key_type', 'utf-8'),
+        params.get('iv_type', 'utf-8'),
+        params.get('data_type')
+    )
+
+
+@register_operation('cast_decrypt')
+def cast_decrypt(data, params):
+    return ExtraCiphers.cast_decrypt(
+        data,
+        params.get('key', ''),
+        params.get('mode', 'ECB'),
+        params.get('iv', ''),
+        params.get('padding', 'pkcs7'),
+        params.get('key_type', 'utf-8'),
+        params.get('iv_type', 'utf-8'),
+        params.get('data_type')
+    )
+
+
+@register_operation('arc2_encrypt')
+def arc2_encrypt(data, params):
+    return ExtraCiphers.arc2_encrypt(
+        data,
+        params.get('key', ''),
+        params.get('mode', 'ECB'),
+        params.get('iv', ''),
+        params.get('padding', 'pkcs7'),
+        params.get('key_type', 'utf-8'),
+        params.get('iv_type', 'utf-8'),
+        params.get('data_type')
+    )
+
+
+@register_operation('arc2_decrypt')
+def arc2_decrypt(data, params):
+    return ExtraCiphers.arc2_decrypt(
+        data,
+        params.get('key', ''),
+        params.get('mode', 'ECB'),
+        params.get('iv', ''),
+        params.get('padding', 'pkcs7'),
+        params.get('key_type', 'utf-8'),
+        params.get('iv_type', 'utf-8'),
+        params.get('data_type')
+    )
+
+
+# Extra stream ciphers
+@register_operation('chacha20_encrypt')
+def chacha20_encrypt(data, params):
+    return ExtraCiphers.chacha20_encrypt(
+        data,
+        params.get('key', ''),
+        params.get('nonce', ''),
+        params.get('key_type', 'utf-8'),
+        params.get('nonce_type', 'utf-8'),
+        params.get('data_type')
+    )
+
+
+@register_operation('chacha20_decrypt')
+def chacha20_decrypt(data, params):
+    return ExtraCiphers.chacha20_decrypt(
+        data,
+        params.get('key', ''),
+        params.get('nonce', ''),
+        params.get('key_type', 'utf-8'),
+        params.get('nonce_type', 'utf-8'),
+        params.get('data_type')
+    )
+
+
+@register_operation('salsa20_encrypt')
+def salsa20_encrypt(data, params):
+    return ExtraCiphers.salsa20_encrypt(
+        data,
+        params.get('key', ''),
+        params.get('nonce', ''),
+        params.get('key_type', 'utf-8'),
+        params.get('nonce_type', 'utf-8'),
+        params.get('data_type')
+    )
+
+
+@register_operation('salsa20_decrypt')
+def salsa20_decrypt(data, params):
+    return ExtraCiphers.salsa20_decrypt(
+        data,
+        params.get('key', ''),
+        params.get('nonce', ''),
+        params.get('key_type', 'utf-8'),
+        params.get('nonce_type', 'utf-8'),
+        params.get('data_type')
+    )
