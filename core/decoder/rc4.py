@@ -99,7 +99,8 @@ class RC4Encoders:
     def rc4_encrypt(data: str, key: str, 
                     swap_bytes: bool = False, sbox=None,
                     key_type: str = 'utf-8',
-                    data_type: str = None) -> str:
+                    data_type: str = None,
+                    output_format: str = None) -> str:
         """RC4加密
         
         Args:
@@ -109,6 +110,7 @@ class RC4Encoders:
             sbox: 自定义初始S盒
             key_type: 密钥类型 (hex/utf-8)
             data_type: 输入数据类型 (hex/utf-8)
+            output_format: 输出格式 (hex/base64)，默认 base64
         """
         if not data:
             return ""
@@ -142,22 +144,28 @@ class RC4Encoders:
         # 加密
         encrypted = rc4.encrypt(data_bytes, key_bytes)
         
+        # 输出格式
+        if output_format and output_format.lower() == 'hex':
+            return encrypted.hex()
+        
         return base64.b64encode(encrypted).decode('utf-8')
     
     @staticmethod
     def rc4_decrypt(data: str, key: str,
                     swap_bytes: bool = False, sbox=None,
                     key_type: str = 'utf-8',
-                    data_type: str = None) -> str:
+                    data_type: str = None,
+                    output_format: str = None) -> str:
         """RC4解密
         
         Args:
-            data: Base64编码的密文
+            data: Base64或Hex编码的密文
             key: 密钥
             swap_bytes: KSA交换时是否使用魔改逻辑
             sbox: 自定义初始S盒
             key_type: 密钥类型 (hex/utf-8)
             data_type: 输入数据类型 (hex/base64)
+            output_format: 输出格式 (hex/utf-8)，默认自动检测
         """
         if not data:
             return ""
@@ -195,14 +203,26 @@ class RC4Encoders:
         # 解密
         decrypted = rc4.decrypt(encrypted_data, key_bytes)
         
-        # 输出
+        # 输出格式
+        if output_format and output_format.lower() == 'hex':
+            return decrypted.hex()
+        if output_format and output_format.lower() == 'utf-8':
+            # 显式要求 UTF-8：直接解码返回
+            try:
+                return decrypted.decode('utf-8')
+            except UnicodeDecodeError:
+                return decrypted.hex()
+        
+        # 默认行为：自动检测（支持非 ASCII Unicode）
         try:
             text_res = decrypted.decode('utf-8')
-            import string
-            printable = set(string.printable)
-            has_weird = any(c not in printable and c not in ['\n', '\r', '\t'] for c in text_res)
-            if '\x00' in text_res or has_weird:
-                return repr(text_res)
+            import unicodedata
+            has_ctrl = any(
+                unicodedata.category(c).startswith('C') and c not in '\n\r\t'
+                for c in text_res
+            )
+            if has_ctrl:
+                return decrypted.hex()
             return text_res
         except UnicodeDecodeError:
             return decrypted.hex()

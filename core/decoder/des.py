@@ -542,7 +542,7 @@ class DESEncoders:
             printable = set(string.printable)
             has_weird = any(c not in printable and c not in ['\n', '\r', '\t'] for c in text_res)
             if '\x00' in text_res or has_weird:
-                return repr(text_res)
+                return decrypted.hex()
             return text_res
         except UnicodeDecodeError:
             return final_bytes.hex()
@@ -739,7 +739,7 @@ class DESEncoders:
             printable = set(string.printable)
             has_weird = any(c not in printable and c not in ['\n', '\r', '\t'] for c in text_res)
             if '\x00' in text_res or has_weird:
-                return repr(text_res)
+                return decrypted.hex()
             return text_res
         except UnicodeDecodeError:
             return final_bytes.hex()

@@ -52,6 +52,8 @@ class PipelineOperation(BaseModel):
 class PipelineRequest(BaseModel):
     data: str
     operations: List[PipelineOperation]
+    input_format: str = 'hex'
+    output_format: str = 'utf-8'
 
 class ConvertRequest(BaseModel):
     data: str
@@ -456,7 +458,7 @@ logic = MainLogic()
 @app.post("/api/pipeline/run")
 def pipeline_run(req: PipelineRequest):
     try:
-        pipeline = Pipeline()
+        pipeline = Pipeline(input_format=req.input_format, output_format=req.output_format)
         for op_info in req.operations:
             if op_info.name in OPERATION_REGISTRY:
                 func = OPERATION_REGISTRY[op_info.name]

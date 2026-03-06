@@ -1,8 +1,9 @@
 # pipeline.py
 """
 混合编码操作链接口，支持多步编码/解码。
+内部全程使用 hex 字符串传递数据，确保密码操作中间态无损。
 """
-from typing import List, Callable, Dict, Any
+from typing import List, Callable, Dict, Any, Union
 import base64
 import hashlib
 
@@ -16,8 +17,10 @@ class Operation:
         return self.func(data, self.params)
 
 class Pipeline:
-    def __init__(self):
+    def __init__(self, input_format='hex', output_format='utf-8'):
         self.operations: List[Operation] = []
+        self.input_format = input_format
+        self.output_format = output_format
 
     def add_operation(self, operation: Operation):
         self.operations.append(operation)
@@ -32,9 +35,62 @@ class Pipeline:
             self.operations.insert(new_index, op)
 
     def run(self, data: str) -> str:
-        for op in self.operations:
-            data = op.apply(data)
-        return data
+        """执行操作链，内部使用 hex 字符串传递数据以避免二进制数据损坏。"""
+        if not self.operations:
+            return data
+
+        # 将输入统一转为 hex 字符串
+        current = self._to_hex(data, self.input_format)
+
+        for i, op in enumerate(self.operations):
+            is_last = (i == len(self.operations) - 1)
+            # 注入 data_type=hex，确保 operation 以 hex 解析输入
+            op.params['data_type'] = 'hex'
+            if not is_last:
+                # 中间步骤：要求返回 hex 格式
+                op.params['output_format'] = 'hex'
+            else:
+                # 最后一步：按 pipeline 的 output_format 输出
+                op.params['output_format'] = self.output_format
+
+            result = op.apply(current)
+
+            if not is_last:
+                # 确保中间结果是干净的 hex 字符串
+                current = self._ensure_hex(result)
+            else:
+                current = result
+
+        return current
+
+    @staticmethod
+    def _to_hex(data: str, fmt: str) -> str:
+        """将输入数据转为 hex 字符串。"""
+        fmt = (fmt or 'hex').lower()
+        if fmt == 'hex':
+            return data.replace(' ', '').replace('\n', '').replace('\r', '')
+        else:
+            # utf-8 文本 → hex
+            return data.encode('utf-8').hex()
+
+    @staticmethod
+    def _ensure_hex(result: str) -> str:
+        """将 operation 的字符串结果确保转为 hex 格式。"""
+        # 先尝试直接当 hex 解析
+        cleaned = result.replace(' ', '').replace('\n', '').replace('\r', '')
+        try:
+            bytes.fromhex(cleaned)
+            return cleaned
+        except ValueError:
+            pass
+        # 尝试 base64 解码
+        try:
+            decoded = base64.b64decode(result)
+            return decoded.hex()
+        except Exception:
+            pass
+        # 兜底：当作 UTF-8 文本转 hex
+        return result.encode('utf-8').hex()
 
 # 注册所有可用操作
 OPERATION_REGISTRY: Dict[str, Callable[[str, Dict[str, Any]], str]] = {}
@@ -233,10 +289,26 @@ def xor_bytes(data, params):
 
     result = bytes([b ^ key_bytes[i % len(key_bytes)] for i, b in enumerate(data_bytes)])
 
-    if output_format.lower() == 'hex':
+    # output_format 支持: hex / utf-8
+    if output_format and output_format.lower() == 'hex':
         return result.hex()
+    if output_format and output_format.lower() == 'utf-8':
+        # 显式要求 UTF-8：直接解码返回
+        try:
+            return result.decode('utf-8')
+        except UnicodeDecodeError:
+            return result.hex()
+    # 自动检测模式：检查是否为可打印文本（支持非 ASCII Unicode）
     try:
-        return result.decode('utf-8')
+        text_res = result.decode('utf-8')
+        import unicodedata
+        has_ctrl = any(
+            unicodedata.category(c).startswith('C') and c not in '\n\r\t'
+            for c in text_res
+        )
+        if has_ctrl:
+            return result.hex()
+        return text_res
     except Exception:
         return result.hex()
 
@@ -386,9 +458,11 @@ def rc4_encrypt(data, params):
     sbox = params.get('sbox')
     val_key_type = params.get('key_type', 'utf-8')
     val_data_type = params.get('data_type')
+    val_output_format = params.get('output_format')
     
     return RC4Encoders.rc4_encrypt(data, key, swap_bytes=swap_bytes, sbox=sbox,
-                                   key_type=val_key_type, data_type=val_data_type)
+                                   key_type=val_key_type, data_type=val_data_type,
+                                   output_format=val_output_format)
 
 @register_operation('rc4_decrypt')
 def rc4_decrypt(data, params):
@@ -397,9 +471,11 @@ def rc4_decrypt(data, params):
     sbox = params.get('sbox')
     val_key_type = params.get('key_type', 'utf-8')
     val_data_type = params.get('data_type')
+    val_output_format = params.get('output_format')
     
     return RC4Encoders.rc4_decrypt(data, key, swap_bytes=swap_bytes, sbox=sbox,
-                                   key_type=val_key_type, data_type=val_data_type)
+                                   key_type=val_key_type, data_type=val_data_type,
+                                   output_format=val_output_format)
 
 
 # Extra block ciphers
