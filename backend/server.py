@@ -796,11 +796,12 @@ async def websocket_endpoint(websocket: WebSocket):
     send_task = None
     try:
         # Determine CWD
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         initial_cwd = None
         if os.environ.get("APPIMAGE"):
             initial_cwd = os.path.dirname(os.environ["APPIMAGE"])
         else:
-            initial_cwd = os.getcwd()
+            initial_cwd = project_root if os.path.isdir(project_root) else os.getcwd()
             
         # 1. 握手/初始化
         # 不同于 websockets 库，FastAPI 已经 accept 了
