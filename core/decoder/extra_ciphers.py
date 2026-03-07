@@ -58,13 +58,23 @@ def _normalize_key(key_bytes: bytes, min_len: int, max_len: int) -> bytes:
     return key_bytes
 
 
-def _text_or_hex(data: bytes) -> str:
+def _text_or_hex(data: bytes, output_format: str = None) -> str:
+    fmt = (output_format or "").lower()
+    if fmt == "hex":
+        return data.hex()
+    if fmt == "base64":
+        return base64.b64encode(data).decode("utf-8")
+    if fmt == "utf-8":
+        return data.decode("utf-8", errors="replace")
+
     try:
         text_res = data.decode("utf-8")
-        import string
-        printable = set(string.printable)
-        has_weird = any(c not in printable and c not in ["\n", "\r", "\t"] for c in text_res)
-        if "\x00" in text_res or has_weird:
+        import unicodedata
+        has_ctrl = any(
+            unicodedata.category(c).startswith("C") and c not in ["\n", "\r", "\t"]
+            for c in text_res
+        )
+        if has_ctrl:
             return data.hex()
         return text_res
     except UnicodeDecodeError:
@@ -133,7 +143,7 @@ def _encrypt_block(cipher_cls, data: str, key: str, mode: str, iv: str,
 
 def _decrypt_block(cipher_cls, data: str, key: str, mode: str, iv: str,
                    padding: str, key_type: str, iv_type: str, data_type: str,
-                   key_min: int, key_max: int) -> str:
+                   key_min: int, key_max: int, output_format: str = None) -> str:
     if not data:
         return ""
 
@@ -167,7 +177,7 @@ def _decrypt_block(cipher_cls, data: str, key: str, mode: str, iv: str,
         counter = Counter.new(cipher_cls.block_size * 8, initial_value=iv_int)
         cipher = cipher_cls.new(key_bytes, cipher_cls.MODE_CTR, counter=counter)
         decrypted = cipher.decrypt(encrypted)
-        return _text_or_hex(decrypted)
+        return _text_or_hex(decrypted, output_format)
 
     mode_map = {
         "ECB": cipher_cls.MODE_ECB,
@@ -188,7 +198,7 @@ def _decrypt_block(cipher_cls, data: str, key: str, mode: str, iv: str,
     else:
         final_bytes = _unpad(decrypted, padding)
 
-    return _text_or_hex(final_bytes)
+    return _text_or_hex(final_bytes, output_format)
 
 
 def _encrypt_stream(cipher_cls, data: str, key: str, nonce: str, key_type: str,
@@ -226,7 +236,7 @@ def _encrypt_stream(cipher_cls, data: str, key: str, nonce: str, key_type: str,
 
 def _decrypt_stream(cipher_cls, data: str, key: str, nonce: str, key_type: str,
                     nonce_type: str, data_type: str, nonce_size: int,
-                    key_len: int) -> str:
+                    key_len: int, output_format: str = None) -> str:
     if not data:
         return ""
 
@@ -254,7 +264,7 @@ def _decrypt_stream(cipher_cls, data: str, key: str, nonce: str, key_type: str,
 
     cipher = cipher_cls.new(key=key_bytes, nonce=nonce_bytes)
     decrypted = cipher.decrypt(encrypted)
-    return _text_or_hex(decrypted)
+    return _text_or_hex(decrypted, output_format)
 
 
 class ExtraCiphers:
@@ -270,9 +280,10 @@ class ExtraCiphers:
     @staticmethod
     def blowfish_decrypt(data: str, key: str, mode: str = "ECB", iv: str = "",
                          padding: str = "pkcs7", key_type: str = "utf-8",
-                         iv_type: str = "utf-8", data_type: str = None) -> str:
+                        iv_type: str = "utf-8", data_type: str = None,
+                        output_format: str = None) -> str:
         return _decrypt_block(Blowfish, data, key, mode, iv, padding,
-                              key_type, iv_type, data_type, 4, 56)
+                            key_type, iv_type, data_type, 4, 56, output_format)
 
     @staticmethod
     def cast_encrypt(data: str, key: str, mode: str = "ECB", iv: str = "",
@@ -284,9 +295,10 @@ class ExtraCiphers:
     @staticmethod
     def cast_decrypt(data: str, key: str, mode: str = "ECB", iv: str = "",
                      padding: str = "pkcs7", key_type: str = "utf-8",
-                     iv_type: str = "utf-8", data_type: str = None) -> str:
+                     iv_type: str = "utf-8", data_type: str = None,
+                     output_format: str = None) -> str:
         return _decrypt_block(CAST, data, key, mode, iv, padding,
-                              key_type, iv_type, data_type, 5, 16)
+                              key_type, iv_type, data_type, 5, 16, output_format)
 
     @staticmethod
     def arc2_encrypt(data: str, key: str, mode: str = "ECB", iv: str = "",
@@ -298,9 +310,10 @@ class ExtraCiphers:
     @staticmethod
     def arc2_decrypt(data: str, key: str, mode: str = "ECB", iv: str = "",
                      padding: str = "pkcs7", key_type: str = "utf-8",
-                     iv_type: str = "utf-8", data_type: str = None) -> str:
+                     iv_type: str = "utf-8", data_type: str = None,
+                     output_format: str = None) -> str:
         return _decrypt_block(ARC2, data, key, mode, iv, padding,
-                              key_type, iv_type, data_type, 5, 128)
+                              key_type, iv_type, data_type, 5, 128, output_format)
 
     @staticmethod
     def chacha20_encrypt(data: str, key: str, nonce: str = "",
@@ -312,9 +325,9 @@ class ExtraCiphers:
     @staticmethod
     def chacha20_decrypt(data: str, key: str, nonce: str = "",
                          key_type: str = "utf-8", nonce_type: str = "utf-8",
-                         data_type: str = None) -> str:
+                     data_type: str = None, output_format: str = None) -> str:
         return _decrypt_stream(ChaCha20, data, key, nonce, key_type,
-                               nonce_type, data_type, 8, 32)
+                         nonce_type, data_type, 8, 32, output_format)
 
     @staticmethod
     def salsa20_encrypt(data: str, key: str, nonce: str = "",
@@ -326,6 +339,6 @@ class ExtraCiphers:
     @staticmethod
     def salsa20_decrypt(data: str, key: str, nonce: str = "",
                         key_type: str = "utf-8", nonce_type: str = "utf-8",
-                        data_type: str = None) -> str:
+                   data_type: str = None, output_format: str = None) -> str:
         return _decrypt_stream(Salsa20, data, key, nonce, key_type,
-                               nonce_type, data_type, 8, 32)
+                       nonce_type, data_type, 8, 32, output_format)

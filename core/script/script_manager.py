@@ -10,6 +10,8 @@ Script Manager - 用户脚本库管理模块
 import os
 import json
 import uuid
+import sys
+import shutil
 import subprocess
 import threading
 from datetime import datetime
@@ -21,29 +23,115 @@ class ScriptManager:
     """管理用户上传的Python脚本"""
     
     def __init__(self, scripts_dir: Optional[str] = None):
+        self.project_root = Path(__file__).resolve().parents[2]
+        self.legacy_scripts_dir = Path(__file__).parent / "user_scripts"
+
         # 默认脚本存储目录
         if scripts_dir is None:
-            self.scripts_dir = Path(__file__).parent / "user_scripts"
+            self.scripts_dir = self.project_root / "scripts"
         else:
-            self.scripts_dir = Path(scripts_dir)
+            self.scripts_dir = Path(scripts_dir).resolve()
         
         self.metadata_file = self.scripts_dir / "metadata.json"
         self._ensure_dirs()
+        self._migrate_legacy_scripts()
         self._load_metadata()
     
     def _ensure_dirs(self):
         """确保必要目录存在"""
         self.scripts_dir.mkdir(parents=True, exist_ok=True)
+
         if not self.metadata_file.exists():
-            self._save_metadata({})
+            self.metadata_file.write_text("{}", encoding='utf-8')
+
+    def _load_metadata_file(self, metadata_file: Path) -> Dict:
+        """从指定元数据文件加载数据"""
+        try:
+            with open(metadata_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {}
+
+    def _relative_script_path(self, filename: str) -> str:
+        """获取相对于项目根目录的脚本路径"""
+        script_path = self.scripts_dir / filename
+        try:
+            return script_path.relative_to(self.project_root).as_posix()
+        except ValueError:
+            return os.path.relpath(script_path, self.project_root).replace('\\', '/')
+
+    def _serialize_script_info(self, script_id: str, info: Dict) -> Dict:
+        """统一序列化脚本信息"""
+        filename = info.get("filename", f"{script_id}.py")
+        return {
+            "id": script_id,
+            "name": info.get("name", "Unnamed"),
+            "description": info.get("description", ""),
+            "filename": filename,
+            "relative_path": self._relative_script_path(filename),
+            "created_at": info.get("created_at", ""),
+            "updated_at": info.get("updated_at", ""),
+        }
+
+    def _migrate_legacy_scripts(self):
+        """将旧目录中的脚本迁移到项目根目录 scripts/ 下"""
+        if self.legacy_scripts_dir.resolve() == self.scripts_dir.resolve():
+            return
+
+        if not self.legacy_scripts_dir.exists():
+            return
+
+        current_metadata = self._load_metadata_file(self.metadata_file)
+        legacy_metadata_file = self.legacy_scripts_dir / "metadata.json"
+        legacy_metadata = self._load_metadata_file(legacy_metadata_file)
+        merged_metadata = dict(current_metadata)
+        changed = False
+
+        for script_id, info in legacy_metadata.items():
+            filename = info.get("filename", f"{script_id}.py")
+            legacy_file = self.legacy_scripts_dir / filename
+            target_file = self.scripts_dir / filename
+            has_script_file = legacy_file.exists() or target_file.exists()
+
+            if legacy_file.exists() and not target_file.exists():
+                shutil.copy2(legacy_file, target_file)
+                changed = True
+
+            if has_script_file and script_id not in merged_metadata:
+                merged_metadata[script_id] = {
+                    "name": info.get("name", script_id),
+                    "description": info.get("description", ""),
+                    "filename": filename,
+                    "created_at": info.get("created_at", ""),
+                    "updated_at": info.get("updated_at", info.get("created_at", "")),
+                }
+                changed = True
+
+        if not legacy_metadata:
+            for legacy_file in self.legacy_scripts_dir.glob("*.py"):
+                target_file = self.scripts_dir / legacy_file.name
+                if not target_file.exists():
+                    shutil.copy2(legacy_file, target_file)
+                    changed = True
+
+                script_id = legacy_file.stem
+                if script_id not in merged_metadata:
+                    timestamp = datetime.fromtimestamp(legacy_file.stat().st_mtime).isoformat()
+                    merged_metadata[script_id] = {
+                        "name": script_id,
+                        "description": "",
+                        "filename": legacy_file.name,
+                        "created_at": timestamp,
+                        "updated_at": timestamp,
+                    }
+                    changed = True
+
+        if changed:
+            self._save_metadata(merged_metadata)
     
     def _load_metadata(self) -> Dict:
         """加载脚本元数据"""
-        try:
-            with open(self.metadata_file, 'r', encoding='utf-8') as f:
-                self._metadata = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            self._metadata = {}
+        self._metadata = self._load_metadata_file(self.metadata_file)
         return self._metadata
     
     def _save_metadata(self, metadata: Dict):
@@ -57,14 +145,7 @@ class ScriptManager:
         self._load_metadata()
         scripts = []
         for script_id, info in self._metadata.items():
-            scripts.append({
-                "id": script_id,
-                "name": info.get("name", "Unnamed"),
-                "description": info.get("description", ""),
-                "filename": info.get("filename", ""),
-                "created_at": info.get("created_at", ""),
-                "updated_at": info.get("updated_at", "")
-            })
+            scripts.append(self._serialize_script_info(script_id, info))
         return sorted(scripts, key=lambda x: x.get("created_at", ""), reverse=True)
     
     def add_script(self, name: str, content: str, description: str = "") -> Dict:
@@ -99,13 +180,7 @@ class ScriptManager:
         }
         self._save_metadata(self._metadata)
         
-        return {
-            "id": script_id,
-            "name": name,
-            "description": description,
-            "filename": filename,
-            "created_at": now
-        }
+        return self._serialize_script_info(script_id, self._metadata[script_id])
     
     def get_script(self, script_id: str) -> Optional[Dict]:
         """获取单个脚本详情 (含内容)"""
@@ -121,14 +196,9 @@ class ScriptManager:
             with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read()
         
-        return {
-            "id": script_id,
-            "name": info.get("name", ""),
-            "description": info.get("description", ""),
-            "content": content,
-            "created_at": info.get("created_at", ""),
-            "updated_at": info.get("updated_at", "")
-        }
+        script_data = self._serialize_script_info(script_id, info)
+        script_data["content"] = content
+        return script_data
     
     def update_script(self, script_id: str, name: str = None, 
                       content: str = None, description: str = None) -> Optional[Dict]:
@@ -190,17 +260,18 @@ class ScriptManager:
             yield f"[Error] Script file not found: {filepath}"
             return
         
-        yield f"$ python {info['filename']}\n"
+        relative_path = self._relative_script_path(info['filename'])
+        yield f"$ python {relative_path}\n"
         
         try:
             # Use sys.executable for cross-platform compatibility
             process = subprocess.Popen(
-                [sys.executable, str(filepath)],
+                [sys.executable, relative_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
-                cwd=str(self.scripts_dir)
+                cwd=str(self.project_root)
             )
             
             for line in iter(process.stdout.readline, ''):

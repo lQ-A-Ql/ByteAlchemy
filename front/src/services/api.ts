@@ -2,7 +2,30 @@
  * API 服务层 - 封装所有后端 API 调用
  */
 
-const API_BASE = 'http://127.0.0.1:3335';
+const DEFAULT_API_BASE = 'http://127.0.0.1:3335';
+
+export function getApiBase(): string {
+  const envBase = import.meta.env.VITE_API_BASE?.trim();
+  return envBase || DEFAULT_API_BASE;
+}
+
+export function getTerminalWebSocketUrl(): string {
+  const envWs = import.meta.env.VITE_TERMINAL_WS_URL?.trim();
+  if (envWs) {
+    return envWs;
+  }
+
+  try {
+    const apiUrl = new URL(getApiBase());
+    apiUrl.protocol = apiUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+    apiUrl.pathname = '/ws/terminal';
+    apiUrl.search = '';
+    apiUrl.hash = '';
+    return apiUrl.toString();
+  } catch {
+    return 'ws://127.0.0.1:3335/ws/terminal';
+  }
+}
 
 // Pipeline operation 类型
 export interface PipelineOperation {
@@ -22,7 +45,7 @@ async function apiRequest<T>(
   };
   if (body) config.body = JSON.stringify(body);
 
-  const response = await fetch(`${API_BASE}${endpoint}`, config);
+  const response = await fetch(`${getApiBase()}${endpoint}`, config);
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(error.detail || `API Error: ${response.status}`);
@@ -31,8 +54,18 @@ async function apiRequest<T>(
 }
 
 // ==================== Pipeline API ====================
-export async function runPipeline(data: string, operations: PipelineOperation[]): Promise<string> {
-  const result = await apiRequest<{ result: string }>('/api/pipeline/run', 'POST', { data, operations });
+export async function runPipeline(
+  data: string,
+  operations: PipelineOperation[],
+  inputFormat = 'utf-8',
+  outputFormat = 'auto'
+): Promise<string> {
+  const result = await apiRequest<{ result: string }>('/api/pipeline/run', 'POST', {
+    data,
+    operations,
+    input_format: inputFormat,
+    output_format: outputFormat,
+  });
   return result.result;
 }
 
@@ -94,6 +127,8 @@ export interface Script {
   name: string;
   content: string;
   description: string;
+  filename?: string;
+  relative_path?: string;
   created_at?: string;
   updated_at?: string;
 }

@@ -120,7 +120,7 @@ export function AssistPanel({
   }, [output, outputFormat]);
 
   return (
-    <div className="h-full bg-white/60 backdrop-blur-md rounded-3xl p-4 ring-1 ring-blue-100 flex flex-col gap-3">
+    <div className="h-full min-h-0 bg-white/60 backdrop-blur-md rounded-3xl p-4 ring-1 ring-blue-100 flex flex-col gap-3 overflow-hidden">
       <div className="flex items-center justify-between">
         <div className="text-sm text-gray-700 font-medium">辅助工具</div>
         <div className="flex items-center gap-2">
@@ -142,7 +142,7 @@ export function AssistPanel({
         </div>
       </div>
       {!collapsed && (
-        <>
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1">
           <div className="bg-white/70 border border-blue-100 rounded-xl p-3">
             <div className="text-xs text-gray-600 mb-2">输入预处理（适配魔改 HEX）</div>
             <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
@@ -242,7 +242,7 @@ export function AssistPanel({
               </div>
             )}
           </div>
-        </>
+        </div>
       )}
     </div>
   );

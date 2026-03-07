@@ -7,10 +7,10 @@ class HtmlEncoders:
     @staticmethod
     def html_encode(data: str) -> str:
         try:
-            result = data.replace('&', '&')
-            result = result.replace('<', '<')
-            result = result.replace('>', '>')
-            result = result.replace('"', '"')
+            result = data.replace('&', '&amp;')
+            result = result.replace('<', '&lt;')
+            result = result.replace('>', '&gt;')
+            result = result.replace('"', '&quot;')
             result = result.replace("'", '&#39;')
             return result
         except Exception as e:

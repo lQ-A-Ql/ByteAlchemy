@@ -10,6 +10,10 @@ import base64
 class BaseEncoders:
     """Base家族编码解码器"""
     @staticmethod
+    def _clean_input(data: str) -> str:
+        return data.strip().replace(' ', '').replace('\n', '').replace('\r', '')
+
+    @staticmethod
     def base16_encode(data: str) -> str:
         try:
             if isinstance(data, str):
@@ -21,11 +25,15 @@ class BaseEncoders:
     @staticmethod
     def base16_decode(data: str) -> str:
         try:
-            data = data.strip().replace(' ', '').replace('\n', '').replace('\r', '')
-            decoded = base64.b16decode(data.upper())
+            decoded = BaseEncoders.base16_decode_to_bytes(data)
             return decoded.decode('utf-8')
         except Exception as e:
             raise ValueError(f"Base16解码失败: {str(e)}")
+
+    @staticmethod
+    def base16_decode_to_bytes(data: str) -> bytes:
+        cleaned = BaseEncoders._clean_input(data)
+        return base64.b16decode(cleaned.upper())
 
     @staticmethod
     def base32_encode(data: str) -> str:
@@ -39,14 +47,18 @@ class BaseEncoders:
     @staticmethod
     def base32_decode(data: str) -> str:
         try:
-            data = data.strip().replace(' ', '').replace('\n', '').replace('\r', '').replace('=', '')
-            padding = len(data) % 8
-            if padding != 0:
-                data += '=' * (8 - padding)
-            decoded = base64.b32decode(data)
+            decoded = BaseEncoders.base32_decode_to_bytes(data)
             return decoded.decode('utf-8')
         except Exception as e:
             raise ValueError(f"Base32解码失败: {str(e)}")
+
+    @staticmethod
+    def base32_decode_to_bytes(data: str) -> bytes:
+        cleaned = BaseEncoders._clean_input(data).replace('=', '')
+        padding = len(cleaned) % 8
+        if padding != 0:
+            cleaned += '=' * (8 - padding)
+        return base64.b32decode(cleaned)
 
     @staticmethod
     def base64_encode(data: str, url_safe: bool = False) -> str:
@@ -63,17 +75,20 @@ class BaseEncoders:
     @staticmethod
     def base64_decode(data: str, url_safe: bool = False) -> str:
         try:
-            data = data.strip().replace(' ', '').replace('\n', '').replace('\r', '')
-            if url_safe:
-                decoded = base64.urlsafe_b64decode(data)
-            else:
-                padding = len(data) % 4
-                if padding != 0:
-                    data += '=' * (4 - padding)
-                decoded = base64.b64decode(data)
+            decoded = BaseEncoders.base64_decode_to_bytes(data, url_safe=url_safe)
             return decoded.decode('utf-8')
         except Exception as e:
             raise ValueError(f"Base64解码失败: {str(e)}")
+
+    @staticmethod
+    def base64_decode_to_bytes(data: str, url_safe: bool = False) -> bytes:
+        cleaned = BaseEncoders._clean_input(data)
+        if url_safe:
+            return base64.urlsafe_b64decode(cleaned)
+        padding = len(cleaned) % 4
+        if padding != 0:
+            cleaned += '=' * (4 - padding)
+        return base64.b64decode(cleaned)
 
     @staticmethod
     def base85_encode(data: str, variant: str = 'ascii85') -> str:
@@ -92,18 +107,21 @@ class BaseEncoders:
     @staticmethod
     def base85_decode(data: str, variant: str = 'ascii85') -> str:
         try:
-            data = data.strip().replace(' ', '').replace('\n', '').replace('\r', '')
-            if variant == 'ascii85':
-                if data.startswith('<~') and data.endswith('~>'):
-                    data = data[2:-2]
-                decoded = base64.a85decode(data)
-            elif variant == 'z85':
-                decoded = BaseEncoders._z85_decode(data)
-            else:
-                raise ValueError(f"不支持的Base85变体: {variant}")
+            decoded = BaseEncoders.base85_decode_to_bytes(data, variant=variant)
             return decoded.decode('utf-8')
         except Exception as e:
             raise ValueError(f"Base85解码失败: {str(e)}")
+
+    @staticmethod
+    def base85_decode_to_bytes(data: str, variant: str = 'ascii85') -> bytes:
+        cleaned = BaseEncoders._clean_input(data)
+        if variant == 'ascii85':
+            if cleaned.startswith('<~') and cleaned.endswith('~>'):
+                cleaned = cleaned[2:-2]
+            return base64.a85decode(cleaned)
+        if variant == 'z85':
+            return BaseEncoders._z85_decode(cleaned)
+        raise ValueError(f"不支持的Base85变体: {variant}")
 
     @staticmethod
     def _z85_encode(data: bytes) -> str:

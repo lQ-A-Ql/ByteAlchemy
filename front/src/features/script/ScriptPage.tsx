@@ -128,7 +128,8 @@ export function ScriptPage() {
         setShowRunDialog(false);
         setActiveTab('terminal');
 
-        const scriptPath = `core/script/user_scripts/${selectedScript.id}.py`;
+        const scriptPath = selectedScript.relative_path
+            || (selectedScript.filename ? `scripts/${selectedScript.filename}` : `scripts/${selectedScript.id}.py`);
 
         const args = scriptArgs.trim();
         const fileArg = scriptFilePath.trim();
@@ -145,16 +146,10 @@ export function ScriptPage() {
             inputLines = manualInput.replace(/\r\n/g, '\n').split('\n');
         }
 
-        setTimeout(() => {
-            runTerminalCommand(command);
-            if (inputLines.length > 0) {
-                setTimeout(() => {
-                    inputLines.forEach((line) => {
-                        runTerminalInput(`${line}\r\n`);
-                    });
-                }, 200);
-            }
-        }, 300);
+        runTerminalCommand(command);
+        inputLines.forEach((line) => {
+            runTerminalInput(`${line}\r\n`);
+        });
     };
 
     const startEdit = (script: Script) => {

@@ -1,11 +1,51 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Terminal as TerminalIcon, RefreshCw, Trash2, Wifi, WifiOff } from 'lucide-react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
+import { getTerminalWebSocketUrl } from '@/services/api';
 import 'xterm/css/xterm.css';
 
-const WS_URL = 'ws://127.0.0.1:3336';
+type PendingTerminalAction = {
+    type: 'command' | 'input';
+    payload: string;
+};
+
+type TerminalBridge = {
+    sendCommand: (cmd: string) => void;
+    sendInput: (data: string) => void;
+    isReady: () => boolean;
+};
+
+const MAX_PENDING_ACTIONS = 200;
+const pendingTerminalActions: PendingTerminalAction[] = [];
+let activeTerminalBridge: TerminalBridge | null = null;
+
+function enqueueTerminalAction(action: PendingTerminalAction) {
+    pendingTerminalActions.push(action);
+    if (pendingTerminalActions.length > MAX_PENDING_ACTIONS) {
+        pendingTerminalActions.shift();
+    }
+}
+
+function flushPendingTerminalActions() {
+    if (!activeTerminalBridge || !activeTerminalBridge.isReady()) {
+        return;
+    }
+
+    while (pendingTerminalActions.length > 0 && activeTerminalBridge.isReady()) {
+        const action = pendingTerminalActions.shift();
+        if (!action) {
+            return;
+        }
+
+        if (action.type === 'command') {
+            activeTerminalBridge.sendCommand(action.payload);
+        } else {
+            activeTerminalBridge.sendInput(action.payload);
+        }
+    }
+}
 
 // Light theme
 const lightTheme = {
@@ -33,6 +73,7 @@ export function XTermTerminal() {
     const isConnecting = useRef(false);
     const initialized = useRef(false);
     const [isConnected, setIsConnected] = useState(false);
+    const wsUrl = useMemo(() => getTerminalWebSocketUrl(), []);
 
     const connectWebSocket = useCallback(() => {
         if (!terminalInstance.current || isConnecting.current) return;
@@ -42,14 +83,14 @@ export function XTermTerminal() {
         const term = terminalInstance.current;
 
         try {
-            const ws = new WebSocket(WS_URL);
+            const ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
                 isConnecting.current = false;
                 setIsConnected(true);
                 websocket.current = ws;
                 ws.send(`INIT:${term.rows}:${term.cols}`);
-                term.write('\x1b[1;32m[终端已连接]\x1b[0m\r\n$ ');
+                flushPendingTerminalActions();
             };
 
             ws.onmessage = (e) => term.write(e.data);
@@ -64,10 +105,10 @@ export function XTermTerminal() {
                 isConnecting.current = false;
                 setIsConnected(false);
             };
-        } catch (e) {
+        } catch {
             isConnecting.current = false;
         }
-    }, []);
+    }, [wsUrl]);
 
     const reconnect = useCallback(() => {
         if (websocket.current) {
@@ -83,17 +124,42 @@ export function XTermTerminal() {
         terminalInstance.current?.clear();
     }, []);
 
+    const isTerminalReady = useCallback(() => websocket.current?.readyState === WebSocket.OPEN, []);
+
     const sendCommand = useCallback((cmd: string) => {
         if (websocket.current?.readyState === WebSocket.OPEN) {
             websocket.current.send(`CMD:${cmd}`);
+            return;
         }
-    }, []);
+
+        enqueueTerminalAction({ type: 'command', payload: cmd });
+        connectWebSocket();
+    }, [connectWebSocket]);
 
     const sendInput = useCallback((data: string) => {
         if (websocket.current?.readyState === WebSocket.OPEN) {
             websocket.current.send(data);
+            return;
         }
-    }, []);
+
+        enqueueTerminalAction({ type: 'input', payload: data });
+        connectWebSocket();
+    }, [connectWebSocket]);
+
+    useEffect(() => {
+        activeTerminalBridge = {
+            sendCommand,
+            sendInput,
+            isReady: isTerminalReady,
+        };
+        flushPendingTerminalActions();
+
+        return () => {
+            if (activeTerminalBridge?.sendCommand === sendCommand) {
+                activeTerminalBridge = null;
+            }
+        };
+    }, [sendCommand, sendInput, isTerminalReady]);
 
     useEffect(() => {
         (window as any).__xtermSendCommand = sendCommand;
@@ -104,7 +170,6 @@ export function XTermTerminal() {
         };
     }, [sendCommand, sendInput]);
 
-    // Initialize terminal
     useEffect(() => {
         if (!terminalRef.current || initialized.current) return;
         initialized.current = true;
@@ -114,7 +179,7 @@ export function XTermTerminal() {
             fontSize: 14,
             fontFamily: "'JetBrains Mono', 'Consolas', monospace",
             theme: lightTheme,
-            allowTransparency: false, // Disable transparency for better rendering
+            allowTransparency: false,
             scrollback: 1000,
             convertEol: true,
         });
@@ -127,45 +192,56 @@ export function XTermTerminal() {
         term.open(terminalRef.current);
         terminalInstance.current = term;
 
-        // Fit after container is sized
+        const handleResize = () => {
+            if (!terminalRef.current || terminalRef.current.offsetHeight <= 0 || terminalRef.current.offsetWidth <= 0) {
+                return;
+            }
+
+            fit.fit();
+            if (websocket.current?.readyState === WebSocket.OPEN && term.rows && term.cols) {
+                websocket.current.send(`RESIZE:${term.rows}:${term.cols}`);
+            }
+        };
+
         const doFit = () => {
-            if (terminalRef.current && terminalRef.current.offsetHeight > 0) {
-                fit.fit();
+            if (
+                terminalRef.current
+                && terminalRef.current.offsetHeight > 0
+                && terminalRef.current.offsetWidth > 0
+            ) {
+                handleResize();
                 connectWebSocket();
             } else {
-                // Retry if not sized yet
                 setTimeout(doFit, 100);
             }
         };
         setTimeout(doFit, 50);
 
         term.onData((data) => {
-            if (websocket.current?.readyState === WebSocket.OPEN) {
-                websocket.current.send(data);
-            }
+            sendInput(data);
         });
 
-        const handleResize = () => {
-            fit.fit();
-            if (websocket.current?.readyState === WebSocket.OPEN && term.rows && term.cols) {
-                websocket.current.send(`RESIZE:${term.rows}:${term.cols}`);
-            }
-        };
         window.addEventListener('resize', handleResize);
+        const resizeObserver = typeof ResizeObserver !== 'undefined'
+            ? new ResizeObserver(() => handleResize())
+            : null;
+        if (resizeObserver && containerRef.current) {
+            resizeObserver.observe(containerRef.current);
+        }
 
         return () => {
             window.removeEventListener('resize', handleResize);
+            resizeObserver?.disconnect();
             if (websocket.current) {
                 try { websocket.current.close(); } catch { }
             }
             term.dispose();
             initialized.current = false;
         };
-    }, [connectWebSocket]);
+    }, [connectWebSocket, sendInput]);
 
     return (
         <div ref={containerRef} className="h-full flex flex-col rounded-2xl overflow-hidden ring-1 ring-cyan-200 bg-white">
-            {/* Header */}
             <div className="flex-shrink-0 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-teal-500 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center">
@@ -174,8 +250,7 @@ export function XTermTerminal() {
                     <h3 className="text-white font-medium text-sm">交互式终端</h3>
                 </div>
                 <div className="flex items-center gap-2">
-                    <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${isConnected ? 'bg-green-500/30 text-white' : 'bg-red-500/30 text-white'
-                        }`}>
+                    <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${isConnected ? 'bg-green-500/30 text-white' : 'bg-red-500/30 text-white'}`}>
                         {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
                         {isConnected ? '已连接' : '未连接'}
                     </div>
@@ -193,22 +268,25 @@ export function XTermTerminal() {
                 </div>
             </div>
 
-            {/* Terminal Content - use explicit height calculation */}
-            <div
-                ref={terminalRef}
-                className="flex-1 bg-white p-2"
-                style={{ minHeight: '612px' }}
-            />
+            <div ref={terminalRef} className="flex-1 min-h-0 bg-white p-2" />
         </div>
     );
 }
 
 export function runTerminalCommand(cmd: string) {
-    const fn = (window as any).__xtermSendCommand;
-    if (fn) fn(cmd);
+    if (activeTerminalBridge) {
+        activeTerminalBridge.sendCommand(cmd);
+        return;
+    }
+
+    enqueueTerminalAction({ type: 'command', payload: cmd });
 }
 
 export function runTerminalInput(data: string) {
-    const fn = (window as any).__xtermSendInput;
-    if (fn) fn(data);
+    if (activeTerminalBridge) {
+        activeTerminalBridge.sendInput(data);
+        return;
+    }
+
+    enqueueTerminalAction({ type: 'input', payload: data });
 }

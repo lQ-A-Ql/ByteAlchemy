@@ -13,6 +13,31 @@ import os
 import hashlib
 
 
+def _format_binary_output(data: bytes, output_format: str = None) -> str:
+    fmt = (output_format or '').lower()
+    if fmt == 'hex':
+        return data.hex()
+    if fmt == 'base64':
+        return base64.b64encode(data).decode('utf-8')
+    if fmt == 'utf-8':
+        return data.decode('utf-8', errors='replace')
+
+    try:
+        text_res = data.decode('utf-8')
+        import unicodedata
+        has_ctrl = any(
+            unicodedata.category(c).startswith('C') and c not in '\n\r\t'
+            for c in text_res
+        )
+        if has_ctrl:
+            return data.hex()
+        return text_res
+    except UnicodeDecodeError:
+        return data.hex()
+    except Exception:
+        return data.hex()
+
+
 class DESEncoders:
     """DES加密算法实现"""
     
@@ -425,7 +450,7 @@ class DESEncoders:
     def des_decrypt(data: str, key: str, mode: str = 'ECB', iv: str = '',
                     padding: str = 'pkcs7', sboxes=None,
                     key_type: str = 'utf-8', iv_type: str = 'utf-8',
-                    data_type: str = None) -> str:
+                    data_type: str = None, output_format: str = None) -> str:
         """DES解密"""
         if not data:
             return ""
@@ -536,18 +561,7 @@ class DESEncoders:
         if not is_stream:
             final_bytes = DESEncoders._unpad_data(decrypted, padding)
 
-        try:
-            text_res = final_bytes.decode('utf-8')
-            import string
-            printable = set(string.printable)
-            has_weird = any(c not in printable and c not in ['\n', '\r', '\t'] for c in text_res)
-            if '\x00' in text_res or has_weird:
-                return decrypted.hex()
-            return text_res
-        except UnicodeDecodeError:
-            return final_bytes.hex()
-        except:
-            return final_bytes.hex()
+        return _format_binary_output(final_bytes, output_format)
 
     @staticmethod
     def triple_des_encrypt(data: str, key: str, mode: str = 'ECB', iv: str = '',
@@ -644,7 +658,7 @@ class DESEncoders:
     def triple_des_decrypt(data: str, key: str, mode: str = 'ECB', iv: str = '',
                            padding: str = 'pkcs7', sboxes=None,
                            key_type: str = 'utf-8', iv_type: str = 'utf-8',
-                           data_type: str = None) -> str:
+                           data_type: str = None, output_format: str = None) -> str:
         """3DES解密 (EDE模式)"""
         if not data:
             return ""
@@ -733,15 +747,4 @@ class DESEncoders:
 
         final_bytes = DESEncoders._unpad_data(decrypted, padding)
 
-        try:
-            text_res = final_bytes.decode('utf-8')
-            import string
-            printable = set(string.printable)
-            has_weird = any(c not in printable and c not in ['\n', '\r', '\t'] for c in text_res)
-            if '\x00' in text_res or has_weird:
-                return decrypted.hex()
-            return text_res
-        except UnicodeDecodeError:
-            return final_bytes.hex()
-        except:
-            return final_bytes.hex()
+        return _format_binary_output(final_bytes, output_format)

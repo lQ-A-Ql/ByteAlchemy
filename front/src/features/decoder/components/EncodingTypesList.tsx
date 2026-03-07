@@ -1,4 +1,4 @@
-import { Binary, Lock, Hash, Link, Code2, Type, Shield, ShieldCheck, Key, Fingerprint } from 'lucide-react';
+import { Binary, Lock, Hash, Link, Code2, Type, Shield, ShieldCheck, Key, Fingerprint, Search } from 'lucide-react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -129,62 +129,99 @@ export const operationDefaults: Record<OperationType, Record<string, any> | unde
 
 export function EncodingTypesList({ onAddToChain }: EncodingTypesListProps) {
   const [expandedCategory, setExpandedCategory] = useState<string | null>('常见编码');
+  const [keyword, setKeyword] = useState('');
+
+  const normalizedKeyword = keyword.trim().toLowerCase();
+  const visibleCategories = categories
+    .map((category) => ({
+      ...category,
+      items: category.items.filter((item) => {
+        if (!normalizedKeyword) return true;
+        const label = item.label.toLowerCase();
+        const id = item.id.toLowerCase();
+        return label.includes(normalizedKeyword) || id.includes(normalizedKeyword);
+      }),
+    }))
+    .filter((category) => category.items.length > 0);
 
   return (
-    <div className="h-full bg-white/50 backdrop-blur-md rounded-3xl p-5 ring-1 ring-pink-200 flex flex-col">
-      <h2 className="text-base mb-3 text-gray-700 flex items-center gap-2 flex-shrink-0">
-        <div className="w-1 h-5 bg-gradient-to-b from-pink-500 to-rose-500 rounded-full"></div>
-        操作列表
-      </h2>
+    <div className="h-full rounded-3xl bg-white/50 p-5 ring-1 ring-pink-200 backdrop-blur-md flex flex-col overflow-hidden">
+      <div className="mb-3 space-y-3 flex-shrink-0">
+        <div className="flex items-center gap-2 text-base text-gray-700">
+          <div className="h-5 w-1 rounded-full bg-gradient-to-b from-pink-500 to-rose-500"></div>
+          操作列表
+          <span className="ml-auto text-xs text-gray-400">{visibleCategories.reduce((count, category) => count + category.items.length, 0)} 项</span>
+        </div>
 
-      <div className="flex-1 overflow-y-auto space-y-2">
-        {categories.map((category) => (
-          <div key={category.name} className="rounded-xl overflow-hidden">
-            {/* Category Header */}
-            <button
-              onClick={() => setExpandedCategory(expandedCategory === category.name ? null : category.name)}
-              className={`w-full text-left px-3 py-2.5 text-xs font-semibold text-white bg-gradient-to-r ${category.color} flex items-center justify-between rounded-xl transition-all duration-300 hover:shadow-lg`}
-            >
-              {category.name}
-              <span className="text-white/70">{category.items.length}</span>
-            </button>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-pink-300" />
+          <input
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="搜索算法、编码或操作名..."
+            className="w-full rounded-2xl border border-pink-200 bg-white/80 py-2 pl-10 pr-3 text-sm text-gray-700 outline-none transition-all focus:border-pink-300 focus:ring-2 focus:ring-pink-200"
+          />
+        </div>
+      </div>
 
-            {/* Category Items */}
-            <AnimatePresence>
-              {expandedCategory === category.name && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.25, ease: 'easeInOut' }}
-                  className="overflow-hidden"
-                >
-                  <div className="py-2 space-y-1">
-                    {category.items.map((item) => {
-                      const Icon = item.icon;
-                      return (
-                        <button
-                          key={item.id}
-                          onClick={() => onAddToChain(item.id, item.defaultParams)}
-                          className="group w-full text-left bg-white/60 rounded-xl px-3 py-2 ring-1 ring-pink-100 hover:ring-2 hover:ring-pink-300 transition-all duration-200 hover:shadow-md hover:scale-[1.02] hover:bg-white/80"
-                        >
-                          <div className="flex items-center gap-2">
-                            <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${category.color} flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-200 shadow-sm`}>
-                              <Icon className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
-                            </div>
-                            <span className="text-sm font-medium text-gray-700 group-hover:text-pink-600 transition-colors truncate">
-                              {item.label}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+      <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+        {visibleCategories.length === 0 && (
+          <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-pink-200 bg-white/40 p-6 text-center text-sm text-gray-400">
+            未找到匹配的操作，请尝试使用算法名、编码名或英文操作名搜索。
           </div>
-        ))}
+        )}
+
+        {visibleCategories.map((category) => {
+          const shouldExpand = normalizedKeyword ? true : expandedCategory === category.name;
+
+          return (
+            <div key={category.name} className="rounded-xl overflow-hidden">
+              {/* Category Header */}
+              <button
+                onClick={() => setExpandedCategory(expandedCategory === category.name ? null : category.name)}
+                className={`w-full text-left px-3 py-2.5 text-xs font-semibold text-white bg-gradient-to-r ${category.color} flex items-center justify-between rounded-xl transition-all duration-300 hover:shadow-lg`}
+              >
+                {category.name}
+                <span className="text-white/70">{category.items.length}</span>
+              </button>
+
+              {/* Category Items */}
+              <AnimatePresence>
+                {shouldExpand && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: 'easeInOut' }}
+                    className="overflow-hidden"
+                  >
+                    <div className="py-2 space-y-1">
+                      {category.items.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => onAddToChain(item.id, item.defaultParams)}
+                            className="group w-full text-left bg-white/60 rounded-xl px-3 py-2 ring-1 ring-pink-100 hover:ring-2 hover:ring-pink-300 transition-all duration-200 hover:shadow-md hover:scale-[1.02] hover:bg-white/80"
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${category.color} flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-200 shadow-sm`}>
+                                <Icon className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
+                              </div>
+                              <span className="text-sm font-medium text-gray-700 group-hover:text-pink-600 transition-colors truncate">
+                                {item.label}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -3,6 +3,43 @@ import { Wrench, Search, Sparkles, Copy, Terminal, ArrowLeft, Key, Plus, Trash2 
 import { analyzeIdaPseudocode, IdaAnalyzeResult } from '@/services/api';
 import { runTerminalCommand } from '@/shared/components/XTermTerminal';
 
+interface HashLookupEntry {
+  signature: string;
+  algorithm: string;
+  hashcatMode: string;
+  johnFormat: string;
+  notes: string;
+}
+
+const HASH_LOOKUP_ENTRIES: HashLookupEntry[] = [
+  { signature: '$1$', algorithm: 'MD5 Crypt', hashcatMode: '-m 500', johnFormat: '--format=md5crypt', notes: 'Unix / glibc md5crypt' },
+  { signature: '$apr1$', algorithm: 'Apache MD5', hashcatMode: '-m 1600', johnFormat: '--format=md5-apr1', notes: 'Apache htpasswd APR1' },
+  { signature: '$2a$ / $2b$ / $2y$', algorithm: 'bcrypt', hashcatMode: '-m 3200', johnFormat: '--format=bcrypt', notes: '常见 60 字符 bcrypt' },
+  { signature: '$5$', algorithm: 'SHA-256 Crypt', hashcatMode: '-m 7400', johnFormat: '--format=sha256crypt', notes: 'glibc sha256crypt' },
+  { signature: '$6$', algorithm: 'SHA-512 Crypt', hashcatMode: '-m 1800', johnFormat: '--format=sha512crypt', notes: 'glibc sha512crypt' },
+  { signature: '$pbkdf2-sha256$', algorithm: 'PBKDF2-HMAC-SHA256', hashcatMode: '-m 10900', johnFormat: '--format=pbkdf2-hmac-sha256', notes: 'Passlib / Django 常见变体' },
+  { signature: '$pbkdf2-sha512$', algorithm: 'PBKDF2-HMAC-SHA512', hashcatMode: '-m 12100', johnFormat: '--format=pbkdf2-hmac-sha512', notes: '高迭代 SHA-512 派生' },
+  { signature: '$argon2id$', algorithm: 'Argon2id', hashcatMode: '-m 32000', johnFormat: '--format=argon2', notes: '模块化 Argon2id 字符串' },
+  { signature: '$7z$', algorithm: '7-Zip', hashcatMode: '-m 11600', johnFormat: '--format=7z', notes: '7z 压缩包哈希' },
+  { signature: '$rar5$', algorithm: 'RAR5', hashcatMode: '-m 13000', johnFormat: '--format=rar5', notes: 'RAR5 压缩包哈希' },
+  { signature: '{SHA}', algorithm: 'LDAP SHA-1', hashcatMode: '-m 101', johnFormat: '--format=nsldap', notes: 'LDAP / NS-LDAP {SHA}' },
+  { signature: '32 hex / 无前缀', algorithm: 'Raw MD5', hashcatMode: '-m 0', johnFormat: '--format=raw-md5', notes: '纯 32 位十六进制，需排除 NTLM' },
+  { signature: '32 hex / PWDUMP 场景', algorithm: 'NTLM', hashcatMode: '-m 1000', johnFormat: '--format=nt', notes: 'Windows SAM / NT Hash' },
+  { signature: '40 hex / 无前缀', algorithm: 'Raw SHA-1', hashcatMode: '-m 100', johnFormat: '--format=raw-sha1', notes: '纯 40 位十六进制' },
+  { signature: '64 hex / 无前缀', algorithm: 'Raw SHA-256', hashcatMode: '-m 1400', johnFormat: '--format=raw-sha256', notes: '纯 64 位十六进制' },
+  { signature: '128 hex / 无前缀', algorithm: 'Raw SHA-512', hashcatMode: '-m 1700', johnFormat: '--format=raw-sha512', notes: '纯 128 位十六进制' },
+];
+
+function filterHashLookupEntries(query: string) {
+  const keyword = query.trim().toLowerCase();
+  if (!keyword) return HASH_LOOKUP_ENTRIES;
+
+  return HASH_LOOKUP_ENTRIES.filter((entry) => (
+    [entry.signature, entry.algorithm, entry.hashcatMode, entry.johnFormat, entry.notes]
+      .some((value) => value.toLowerCase().includes(keyword))
+  ));
+}
+
 export function ToolboxPage() {
   const [view, setView] = useState<'home' | 'ida' | 'hashcat' | 'john' | 'known-plaintext'>('home');
   const [code, setCode] = useState('');
@@ -28,6 +65,8 @@ export function ToolboxPage() {
   const [terminalHint, setTerminalHint] = useState<string | null>(null);
   const [hashcatModeCustom, setHashcatModeCustom] = useState('');
   const [johnFormatCustom, setJohnFormatCustom] = useState('');
+  const [hashcatLookupQuery, setHashcatLookupQuery] = useState('');
+  const [johnLookupQuery, setJohnLookupQuery] = useState('');
   const [knownCipherHex, setKnownCipherHex] = useState('');
   const [knownPlainHex, setKnownPlainHex] = useState('');
   const [magicPreset, setMagicPreset] = useState('custom');
@@ -84,7 +123,16 @@ export function ToolboxPage() {
     { label: 'SHA512', value: '-m 1700' },
     { label: 'NTLM', value: '-m 1000' },
     { label: 'bcrypt', value: '-m 3200' },
+    { label: 'MD5 Crypt', value: '-m 500' },
+    { label: 'APR1', value: '-m 1600' },
+    { label: 'SHA256 Crypt', value: '-m 7400' },
+    { label: 'SHA512 Crypt', value: '-m 1800' },
+    { label: 'LDAP SHA1', value: '-m 101' },
     { label: 'PBKDF2-HMAC-SHA256', value: '-m 10900' },
+    { label: 'PBKDF2-HMAC-SHA512', value: '-m 12100' },
+    { label: '7-Zip', value: '-m 11600' },
+    { label: 'RAR5', value: '-m 13000' },
+    { label: 'Argon2id', value: '-m 32000' },
   ];
 
   const hashcatTemplates = [
@@ -101,7 +149,17 @@ export function ToolboxPage() {
     { label: 'SHA512', value: '--format=raw-sha512' },
     { label: 'NTLM', value: '--format=nt' },
     { label: 'bcrypt', value: '--format=bcrypt' },
+    { label: 'MD5 Crypt', value: '--format=md5crypt' },
+    { label: 'APR1', value: '--format=md5-apr1' },
+    { label: 'SHA256 Crypt', value: '--format=sha256crypt' },
+    { label: 'SHA512 Crypt', value: '--format=sha512crypt' },
+    { label: 'PBKDF2-HMAC-SHA256', value: '--format=pbkdf2-hmac-sha256' },
+    { label: 'PBKDF2-HMAC-SHA512', value: '--format=pbkdf2-hmac-sha512' },
+    { label: 'Argon2', value: '--format=argon2' },
+    { label: 'LDAP SHA1', value: '--format=nsldap' },
+    { label: '7z', value: '--format=7z' },
     { label: 'zip', value: '--format=zip' },
+    { label: 'RAR5', value: '--format=rar5' },
   ];
 
   const johnTemplates = [
@@ -165,10 +223,34 @@ export function ToolboxPage() {
     return parts.join(' ');
   }, [johnPath, johnFormat, johnFormatCustom, johnMode, johnFlags, johnHashFile, johnWordlist, johnMask, johnExtra]);
 
+  const filteredHashcatLookupRows = useMemo(
+    () => filterHashLookupEntries(hashcatLookupQuery),
+    [hashcatLookupQuery]
+  );
+
+  const filteredJohnLookupRows = useMemo(
+    () => filterHashLookupEntries(johnLookupQuery),
+    [johnLookupQuery]
+  );
+
   const copyCommand = async (value: string) => {
     await navigator.clipboard.writeText(value);
     setTerminalHint('已复制命令');
     setTimeout(() => setTerminalHint(null), 1500);
+  };
+
+  const applyHashcatLookup = (entry: HashLookupEntry) => {
+    setHashcatMode(entry.hashcatMode);
+    setHashcatModeCustom(entry.hashcatMode);
+    setTerminalHint(`已填入 ${entry.algorithm} → ${entry.hashcatMode}`);
+    setTimeout(() => setTerminalHint(null), 1800);
+  };
+
+  const applyJohnLookup = (entry: HashLookupEntry) => {
+    setJohnFormat(entry.johnFormat);
+    setJohnFormatCustom(entry.johnFormat);
+    setTerminalHint(`已填入 ${entry.algorithm} → ${entry.johnFormat}`);
+    setTimeout(() => setTerminalHint(null), 1800);
   };
 
   const openTerminal = () => {
@@ -178,17 +260,9 @@ export function ToolboxPage() {
 
   const sendCommand = (value: string) => {
     openTerminal();
-    setTimeout(() => {
-      const sender = (window as any).__xtermSendCommand;
-      if (!sender) {
-        setTerminalHint('未连接终端，请在脚本页打开终端');
-        setTimeout(() => setTerminalHint(null), 2000);
-        return;
-      }
-      runTerminalCommand(value);
-      setTerminalHint('已发送到终端');
-      setTimeout(() => setTerminalHint(null), 1500);
-    }, 200);
+    runTerminalCommand(value);
+    setTerminalHint('指令已发送到终端队列');
+    setTimeout(() => setTerminalHint(null), 1500);
   };
 
   const addCustomTool = () => {
@@ -213,17 +287,9 @@ export function ToolboxPage() {
 
   const runCustomTool = (command: string) => {
     openTerminal();
-    setTimeout(() => {
-      const sender = (window as any).__xtermSendCommand;
-      if (!sender) {
-        setTerminalHint('未连接终端，请在脚本页打开终端');
-        setTimeout(() => setTerminalHint(null), 2000);
-        return;
-      }
-      runTerminalCommand(command);
-      setTerminalHint('已发送到终端');
-      setTimeout(() => setTerminalHint(null), 1500);
-    }, 200);
+    runTerminalCommand(command);
+    setTerminalHint('指令已发送到终端队列');
+    setTimeout(() => setTerminalHint(null), 1500);
   };
 
   const cleanHex = (value: string) => value.replace(/0x/gi, '').replace(/[^0-9a-f]/gi, '').toLowerCase();
@@ -508,308 +574,328 @@ export function ToolboxPage() {
       )}
 
       {view === 'hashcat' && (
-        <div className="bg-white/70 backdrop-blur-md rounded-2xl p-5 ring-1 ring-amber-200">
-          <button
-            onClick={() => setView('home')}
-            className="inline-flex items-center gap-2 text-xs text-gray-600 hover:text-gray-800 mb-3"
-          >
-            <ArrowLeft className="w-4 h-4" /> 返回工具箱
-          </button>
-          <div className="flex items-center gap-2 mb-4">
-            <Wrench className="w-4 h-4 text-amber-500" />
-            <h3 className="text-sm font-medium text-gray-700">Hashcat 命令生成</h3>
-          </div>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <div className="space-y-3">
-              <div>
-                <div className="text-xs text-gray-500 mb-1">模板</div>
-                <div className="flex flex-wrap gap-2">
-                  {hashcatTemplates.map((tpl) => (
-                    <button
-                      key={tpl.name}
-                      onClick={() => {
-                        setHashcatMode(tpl.mode);
-                        setHashcatAttack(tpl.attack);
-                        setHashcatFlags(tpl.flags);
-                        setHashcatModeCustom('');
-                      }}
-                      className="px-2.5 py-1 rounded-lg text-xs bg-white/70 text-gray-600 hover:bg-white"
-                    >
-                      {tpl.name}
-                    </button>
-                  ))}
+        <div className="space-y-4">
+          <div className="bg-white/70 backdrop-blur-md rounded-2xl p-5 ring-1 ring-amber-200">
+            <button
+              onClick={() => setView('home')}
+              className="inline-flex items-center gap-2 text-xs text-gray-600 hover:text-gray-800 mb-3"
+            >
+              <ArrowLeft className="w-4 h-4" /> 返回工具箱
+            </button>
+            <div className="flex items-center gap-2 mb-4">
+              <Wrench className="w-4 h-4 text-amber-500" />
+              <h3 className="text-sm font-medium text-gray-700">Hashcat 命令生成</h3>
+            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">模板</div>
+                  <div className="flex flex-wrap gap-2">
+                    {hashcatTemplates.map((tpl) => (
+                      <button
+                        key={tpl.name}
+                        onClick={() => {
+                          setHashcatMode(tpl.mode);
+                          setHashcatAttack(tpl.attack);
+                          setHashcatFlags(tpl.flags);
+                          setHashcatModeCustom('');
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-xs bg-white/70 text-gray-600 hover:bg-white"
+                      >
+                        {tpl.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">哈希类型</div>
+                  <div className="flex flex-wrap gap-2">
+                    {hashcatModeOptions.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setHashcatMode(opt.value)}
+                        className={`px-2.5 py-1 rounded-lg text-xs ${hashcatMode === opt.value ? 'bg-amber-500 text-white' : 'bg-white/70 text-gray-600 hover:bg-white'}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">模式自动补全</div>
+                  <input
+                    list="hashcat-modes"
+                    value={hashcatModeCustom}
+                    onChange={(e) => setHashcatModeCustom(e.target.value)}
+                    placeholder="例如: -m 1800"
+                    className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
+                  />
+                  <datalist id="hashcat-modes">
+                    {hashcatModeOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </datalist>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">攻击模式</div>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { label: '字典', value: '-a 0' },
+                      { label: '掩码', value: '-a 3' },
+                      { label: '字典+掩码', value: '-a 6' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setHashcatAttack(opt.value)}
+                        className={`px-2.5 py-1 rounded-lg text-xs ${hashcatAttack === opt.value ? 'bg-amber-500 text-white' : 'bg-white/70 text-gray-600 hover:bg-white'}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">常用开关</div>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { label: '--show', key: 'show' },
+                      { label: '--username', key: 'username' },
+                      { label: '--force', key: 'force' },
+                      { label: '--potfile-disable', key: 'potfileDisable' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.key}
+                        onClick={() => setHashcatFlags({ ...hashcatFlags, [opt.key]: !hashcatFlags[opt.key as keyof typeof hashcatFlags] })}
+                        className={`px-2.5 py-1 rounded-lg text-xs ${hashcatFlags[opt.key as keyof typeof hashcatFlags] ? 'bg-amber-500 text-white' : 'bg-white/70 text-gray-600 hover:bg-white'}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-1 text-[10px] text-gray-500">
+                    --show 输出已破解；--username 忽略用户名字段；--force 跳过警告；--potfile-disable 禁用 potfile。
+                  </div>
                 </div>
               </div>
-              <div>
-                <div className="text-xs text-gray-500 mb-1">哈希类型</div>
-                <div className="flex flex-wrap gap-2">
-                  {hashcatModeOptions.map((opt) => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setHashcatMode(opt.value)}
-                      className={`px-2.5 py-1 rounded-lg text-xs ${hashcatMode === opt.value ? 'bg-amber-500 text-white' : 'bg-white/70 text-gray-600 hover:bg-white'}`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500 mb-1">模式自动补全</div>
+              <div className="space-y-3">
                 <input
-                  list="hashcat-modes"
-                  value={hashcatModeCustom}
-                  onChange={(e) => setHashcatModeCustom(e.target.value)}
-                  placeholder="例如: -m 1800"
+                  value={hashcatHashFile}
+                  onChange={(e) => setHashcatHashFile(e.target.value)}
+                  placeholder="哈希文件路径"
                   className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
                 />
-                <datalist id="hashcat-modes">
-                  {hashcatModeOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </datalist>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500 mb-1">攻击模式</div>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { label: '字典', value: '-a 0' },
-                    { label: '掩码', value: '-a 3' },
-                    { label: '字典+掩码', value: '-a 6' },
-                  ].map((opt) => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setHashcatAttack(opt.value)}
-                      className={`px-2.5 py-1 rounded-lg text-xs ${hashcatAttack === opt.value ? 'bg-amber-500 text-white' : 'bg-white/70 text-gray-600 hover:bg-white'}`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500 mb-1">常用开关</div>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { label: '--show', key: 'show' },
-                    { label: '--username', key: 'username' },
-                    { label: '--force', key: 'force' },
-                    { label: '--potfile-disable', key: 'potfileDisable' },
-                  ].map((opt) => (
-                    <button
-                      key={opt.key}
-                      onClick={() => setHashcatFlags({ ...hashcatFlags, [opt.key]: !hashcatFlags[opt.key as keyof typeof hashcatFlags] })}
-                      className={`px-2.5 py-1 rounded-lg text-xs ${hashcatFlags[opt.key as keyof typeof hashcatFlags] ? 'bg-amber-500 text-white' : 'bg-white/70 text-gray-600 hover:bg-white'}`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-1 text-[10px] text-gray-500">
-                  --show 输出已破解；--username 忽略用户名字段；--force 跳过警告；--potfile-disable 禁用 potfile。
-                </div>
+                <input
+                  value={hashcatWordlist}
+                  onChange={(e) => setHashcatWordlist(e.target.value)}
+                  placeholder="字典路径 (字典/混合模式)"
+                  className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
+                />
+                <input
+                  value={hashcatMask}
+                  onChange={(e) => setHashcatMask(e.target.value)}
+                  placeholder="掩码 (如 ?l?l?l?l)"
+                  className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
+                />
+                <input
+                  value={hashcatExtra}
+                  onChange={(e) => setHashcatExtra(e.target.value)}
+                  placeholder="额外参数 (可选)"
+                  className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
+                />
               </div>
             </div>
-            <div className="space-y-3">
-              <input
-                value={hashcatHashFile}
-                onChange={(e) => setHashcatHashFile(e.target.value)}
-                placeholder="哈希文件路径"
-                className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
-              />
-              <input
-                value={hashcatWordlist}
-                onChange={(e) => setHashcatWordlist(e.target.value)}
-                placeholder="字典路径 (字典/混合模式)"
-                className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
-              />
-              <input
-                value={hashcatMask}
-                onChange={(e) => setHashcatMask(e.target.value)}
-                placeholder="掩码 (如 ?l?l?l?l)"
-                className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
-              />
-              <input
-                value={hashcatExtra}
-                onChange={(e) => setHashcatExtra(e.target.value)}
-                placeholder="额外参数 (可选)"
-                className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
-              />
+            <div className="mt-4 space-y-2">
+              <div className="text-xs text-gray-500">命令预览</div>
+              <div className="px-3 py-2 bg-amber-50 rounded-lg text-[11px] font-mono text-amber-800 break-all">
+                {hashcatCommand}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => copyCommand(hashcatCommand)}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-medium shadow hover:shadow-md flex items-center gap-1"
+                >
+                  <Copy className="w-3 h-3" /> 复制命令
+                </button>
+                <button
+                  onClick={() => sendCommand(hashcatCommand)}
+                  className="px-3 py-1.5 rounded-lg bg-white text-amber-600 text-xs font-medium ring-1 ring-amber-200 hover:bg-amber-50 flex items-center gap-1"
+                >
+                  <Terminal className="w-3 h-3" /> 发送到终端
+                </button>
+                {terminalHint && <span className="text-xs text-gray-500">{terminalHint}</span>}
+              </div>
             </div>
           </div>
-          <div className="mt-4 space-y-2">
-            <div className="text-xs text-gray-500">命令预览</div>
-            <div className="px-3 py-2 bg-amber-50 rounded-lg text-[11px] font-mono text-amber-800 break-all">
-              {hashcatCommand}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => copyCommand(hashcatCommand)}
-                className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-medium shadow hover:shadow-md flex items-center gap-1"
-              >
-                <Copy className="w-3 h-3" /> 复制命令
-              </button>
-              <button
-                onClick={() => sendCommand(hashcatCommand)}
-                className="px-3 py-1.5 rounded-lg bg-white text-amber-600 text-xs font-medium ring-1 ring-amber-200 hover:bg-amber-50 flex items-center gap-1"
-              >
-                <Terminal className="w-3 h-3" /> 发送到终端
-              </button>
-              {terminalHint && <span className="text-xs text-gray-500">{terminalHint}</span>}
-            </div>
-          </div>
+
+          <HashLookupTable
+            tool="hashcat"
+            query={hashcatLookupQuery}
+            onQueryChange={setHashcatLookupQuery}
+            rows={filteredHashcatLookupRows}
+            onApply={applyHashcatLookup}
+          />
         </div>
       )}
 
       {view === 'john' && (
-        <div className="bg-white/70 backdrop-blur-md rounded-2xl p-5 ring-1 ring-amber-200">
-          <button
-            onClick={() => setView('home')}
-            className="inline-flex items-center gap-2 text-xs text-gray-600 hover:text-gray-800 mb-3"
-          >
-            <ArrowLeft className="w-4 h-4" /> 返回工具箱
-          </button>
-          <div className="flex items-center gap-2 mb-4">
-            <Wrench className="w-4 h-4 text-amber-500" />
-            <h3 className="text-sm font-medium text-gray-700">John 命令生成</h3>
-          </div>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <div className="space-y-3">
-              <div>
-                <div className="text-xs text-gray-500 mb-1">模板</div>
-                <div className="flex flex-wrap gap-2">
-                  {johnTemplates.map((tpl) => (
-                    <button
-                      key={tpl.name}
-                      onClick={() => {
-                        setJohnFormat(tpl.format);
-                        setJohnMode(tpl.mode);
-                        setJohnFlags(tpl.flags);
-                        setJohnFormatCustom('');
-                      }}
-                      className="px-2.5 py-1 rounded-lg text-xs bg-white/70 text-gray-600 hover:bg-white"
-                    >
-                      {tpl.name}
-                    </button>
-                  ))}
+        <div className="space-y-4">
+          <div className="bg-white/70 backdrop-blur-md rounded-2xl p-5 ring-1 ring-amber-200">
+            <button
+              onClick={() => setView('home')}
+              className="inline-flex items-center gap-2 text-xs text-gray-600 hover:text-gray-800 mb-3"
+            >
+              <ArrowLeft className="w-4 h-4" /> 返回工具箱
+            </button>
+            <div className="flex items-center gap-2 mb-4">
+              <Wrench className="w-4 h-4 text-amber-500" />
+              <h3 className="text-sm font-medium text-gray-700">John 命令生成</h3>
+            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">模板</div>
+                  <div className="flex flex-wrap gap-2">
+                    {johnTemplates.map((tpl) => (
+                      <button
+                        key={tpl.name}
+                        onClick={() => {
+                          setJohnFormat(tpl.format);
+                          setJohnMode(tpl.mode);
+                          setJohnFlags(tpl.flags);
+                          setJohnFormatCustom('');
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-xs bg-white/70 text-gray-600 hover:bg-white"
+                      >
+                        {tpl.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">哈希格式</div>
+                  <div className="flex flex-wrap gap-2">
+                    {johnFormatOptions.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setJohnFormat(opt.value)}
+                        className={`px-2.5 py-1 rounded-lg text-xs ${johnFormat === opt.value ? 'bg-amber-500 text-white' : 'bg-white/70 text-gray-600 hover:bg-white'}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">格式自动补全</div>
+                  <input
+                    list="john-formats"
+                    value={johnFormatCustom}
+                    onChange={(e) => setJohnFormatCustom(e.target.value)}
+                    placeholder="例如: --format=sha512crypt"
+                    className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
+                  />
+                  <datalist id="john-formats">
+                    {johnFormatOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </datalist>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">模式</div>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { label: '字典', value: '--wordlist' },
+                      { label: '增量', value: '--incremental' },
+                      { label: '掩码', value: '--mask' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setJohnMode(opt.value)}
+                        className={`px-2.5 py-1 rounded-lg text-xs ${johnMode === opt.value ? 'bg-amber-500 text-white' : 'bg-white/70 text-gray-600 hover:bg-white'}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">常用开关</div>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { label: '--show', key: 'show' },
+                      { label: '--rules', key: 'rules' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.key}
+                        onClick={() => setJohnFlags({ ...johnFlags, [opt.key]: !johnFlags[opt.key as keyof typeof johnFlags] })}
+                        className={`px-2.5 py-1 rounded-lg text-xs ${johnFlags[opt.key as keyof typeof johnFlags] ? 'bg-amber-500 text-white' : 'bg-white/70 text-gray-600 hover:bg-white'}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-1 text-[10px] text-gray-500">
+                    --show 输出已破解；--rules 使用规则变换字典。
+                  </div>
                 </div>
               </div>
-              <div>
-                <div className="text-xs text-gray-500 mb-1">哈希格式</div>
-                <div className="flex flex-wrap gap-2">
-                  {johnFormatOptions.map((opt) => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setJohnFormat(opt.value)}
-                      className={`px-2.5 py-1 rounded-lg text-xs ${johnFormat === opt.value ? 'bg-amber-500 text-white' : 'bg-white/70 text-gray-600 hover:bg-white'}`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500 mb-1">格式自动补全</div>
+              <div className="space-y-3">
                 <input
-                  list="john-formats"
-                  value={johnFormatCustom}
-                  onChange={(e) => setJohnFormatCustom(e.target.value)}
-                  placeholder="例如: --format=raw-md5"
+                  value={johnHashFile}
+                  onChange={(e) => setJohnHashFile(e.target.value)}
+                  placeholder="哈希文件路径"
                   className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
                 />
-                <datalist id="john-formats">
-                  {johnFormatOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </datalist>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500 mb-1">模式</div>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { label: '字典', value: '--wordlist' },
-                    { label: '增量', value: '--incremental' },
-                    { label: '掩码', value: '--mask' },
-                  ].map((opt) => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setJohnMode(opt.value)}
-                      className={`px-2.5 py-1 rounded-lg text-xs ${johnMode === opt.value ? 'bg-amber-500 text-white' : 'bg-white/70 text-gray-600 hover:bg-white'}`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-gray-500 mb-1">常用开关</div>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { label: '--show', key: 'show' },
-                    { label: '--rules', key: 'rules' },
-                  ].map((opt) => (
-                    <button
-                      key={opt.key}
-                      onClick={() => setJohnFlags({ ...johnFlags, [opt.key]: !johnFlags[opt.key as keyof typeof johnFlags] })}
-                      className={`px-2.5 py-1 rounded-lg text-xs ${johnFlags[opt.key as keyof typeof johnFlags] ? 'bg-amber-500 text-white' : 'bg-white/70 text-gray-600 hover:bg-white'}`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-1 text-[10px] text-gray-500">
-                  --show 输出已破解；--rules 使用规则变换字典。
-                </div>
+                <input
+                  value={johnWordlist}
+                  onChange={(e) => setJohnWordlist(e.target.value)}
+                  placeholder="字典路径 (字典模式)"
+                  className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
+                />
+                <input
+                  value={johnMask}
+                  onChange={(e) => setJohnMask(e.target.value)}
+                  placeholder="掩码 (如 ?l?l?l?l)"
+                  className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
+                />
+                <input
+                  value={johnExtra}
+                  onChange={(e) => setJohnExtra(e.target.value)}
+                  placeholder="额外参数 (可选)"
+                  className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
+                />
               </div>
             </div>
-            <div className="space-y-3">
-              <input
-                value={johnHashFile}
-                onChange={(e) => setJohnHashFile(e.target.value)}
-                placeholder="哈希文件路径"
-                className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
-              />
-              <input
-                value={johnWordlist}
-                onChange={(e) => setJohnWordlist(e.target.value)}
-                placeholder="字典路径 (字典模式)"
-                className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
-              />
-              <input
-                value={johnMask}
-                onChange={(e) => setJohnMask(e.target.value)}
-                placeholder="掩码 (如 ?l?l?l?l)"
-                className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
-              />
-              <input
-                value={johnExtra}
-                onChange={(e) => setJohnExtra(e.target.value)}
-                placeholder="额外参数 (可选)"
-                className="w-full px-3 py-2 text-xs bg-white/80 border border-amber-200 rounded-lg"
-              />
+            <div className="mt-4 space-y-2">
+              <div className="text-xs text-gray-500">命令预览</div>
+              <div className="px-3 py-2 bg-amber-50 rounded-lg text-[11px] font-mono text-amber-800 break-all">
+                {johnCommand}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => copyCommand(johnCommand)}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-medium shadow hover:shadow-md flex items-center gap-1"
+                >
+                  <Copy className="w-3 h-3" /> 复制命令
+                </button>
+                <button
+                  onClick={() => sendCommand(johnCommand)}
+                  className="px-3 py-1.5 rounded-lg bg-white text-amber-600 text-xs font-medium ring-1 ring-amber-200 hover:bg-amber-50 flex items-center gap-1"
+                >
+                  <Terminal className="w-3 h-3" /> 发送到终端
+                </button>
+                {terminalHint && <span className="text-xs text-gray-500">{terminalHint}</span>}
+              </div>
             </div>
           </div>
-          <div className="mt-4 space-y-2">
-            <div className="text-xs text-gray-500">命令预览</div>
-            <div className="px-3 py-2 bg-amber-50 rounded-lg text-[11px] font-mono text-amber-800 break-all">
-              {johnCommand}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => copyCommand(johnCommand)}
-                className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-medium shadow hover:shadow-md flex items-center gap-1"
-              >
-                <Copy className="w-3 h-3" /> 复制命令
-              </button>
-              <button
-                onClick={() => sendCommand(johnCommand)}
-                className="px-3 py-1.5 rounded-lg bg-white text-amber-600 text-xs font-medium ring-1 ring-amber-200 hover:bg-amber-50 flex items-center gap-1"
-              >
-                <Terminal className="w-3 h-3" /> 发送到终端
-              </button>
-              {terminalHint && <span className="text-xs text-gray-500">{terminalHint}</span>}
-            </div>
-          </div>
+
+          <HashLookupTable
+            tool="john"
+            query={johnLookupQuery}
+            onQueryChange={setJohnLookupQuery}
+            rows={filteredJohnLookupRows}
+            onApply={applyJohnLookup}
+          />
         </div>
       )}
 
@@ -953,6 +1039,86 @@ export function ToolboxPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+interface HashLookupTableProps {
+  tool: 'hashcat' | 'john';
+  query: string;
+  onQueryChange: (value: string) => void;
+  rows: HashLookupEntry[];
+  onApply: (entry: HashLookupEntry) => void;
+}
+
+function HashLookupTable({ tool, query, onQueryChange, rows, onApply }: HashLookupTableProps) {
+  const actionLabel = tool === 'hashcat' ? '填入 -m' : '填入 --format';
+
+  return (
+    <div className="bg-white/70 backdrop-blur-md rounded-2xl p-5 ring-1 ring-amber-200 space-y-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <Search className="w-4 h-4 text-amber-500" />
+            <h4 className="text-sm font-medium text-gray-700">哈希查询表</h4>
+          </div>
+          <p className="mt-1 text-[11px] text-gray-500">
+            可按前缀、长度或算法名查询，例如 $6$、bcrypt、64 hex。
+          </p>
+        </div>
+        <div className="inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-[11px] text-amber-700 ring-1 ring-amber-200">
+          {rows.length} 条匹配
+        </div>
+      </div>
+
+      <input
+        value={query}
+        onChange={(e) => onQueryChange(e.target.value)}
+        placeholder="输入前缀 / 长度 / 算法名，如 $6$ / bcrypt / 128 hex"
+        className="w-full rounded-xl border border-amber-200 bg-white/80 px-3 py-2 text-xs text-gray-700 outline-none transition-all focus:border-amber-300 focus:ring-2 focus:ring-amber-200"
+      />
+
+      <div className="overflow-x-auto rounded-xl border border-amber-100 bg-white/85">
+        <table className="min-w-full text-xs text-left">
+          <thead className="bg-amber-50/90 text-gray-600">
+            <tr>
+              <th className="px-3 py-2 font-medium">特征</th>
+              <th className="px-3 py-2 font-medium">算法</th>
+              <th className="px-3 py-2 font-medium">Hashcat</th>
+              <th className="px-3 py-2 font-medium">John</th>
+              <th className="px-3 py-2 font-medium">说明</th>
+              <th className="px-3 py-2 font-medium text-right">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-3 py-6 text-center text-gray-400">
+                  未找到匹配项，请尝试更换关键词。
+                </td>
+              </tr>
+            ) : (
+              rows.map((entry) => (
+                <tr key={`${entry.signature}-${entry.hashcatMode}-${entry.johnFormat}`} className="border-t border-amber-100/80 align-top hover:bg-amber-50/50">
+                  <td className="px-3 py-2 font-mono text-[11px] text-gray-700">{entry.signature}</td>
+                  <td className="px-3 py-2 text-gray-800">{entry.algorithm}</td>
+                  <td className={`px-3 py-2 font-mono text-[11px] ${tool === 'hashcat' ? 'text-amber-700' : 'text-gray-600'}`}>{entry.hashcatMode}</td>
+                  <td className={`px-3 py-2 font-mono text-[11px] ${tool === 'john' ? 'text-amber-700' : 'text-gray-600'}`}>{entry.johnFormat}</td>
+                  <td className="px-3 py-2 text-gray-500">{entry.notes}</td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      onClick={() => onApply(entry)}
+                      className="rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-medium text-white shadow-sm transition-all hover:bg-amber-600"
+                    >
+                      {actionLabel}
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

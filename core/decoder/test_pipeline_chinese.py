@@ -46,10 +46,13 @@ pipeline.add_operation(Operation('xor_bytes', OPERATION_REGISTRY['xor_bytes'], {
 }))
 result = pipeline.run(CIPHERTEXT_HEX)
 
+normalized_result = result.replace('\r\n', '\n').strip()
+normalized_expected = EXPECTED_PLAINTEXT.replace('\r\n', '\n').strip()
+
 print(f"Result:\n{result}")
 print()
 
-if result.strip() == EXPECTED_PLAINTEXT.strip():
+if normalized_result == normalized_expected:
     print("[PASS] Chinese text with newlines decrypted correctly!")
 else:
     print("[FAIL] Output does not match expected plaintext")

@@ -11,6 +11,31 @@ import base64
 import os
 import hashlib
 
+
+def _format_binary_output(data: bytes, output_format: str = None) -> str:
+    fmt = (output_format or '').lower()
+    if fmt == 'hex':
+        return data.hex()
+    if fmt == 'base64':
+        return base64.b64encode(data).decode('utf-8')
+    if fmt == 'utf-8':
+        return data.decode('utf-8', errors='replace')
+
+    try:
+        text_res = data.decode('utf-8')
+        import unicodedata
+        has_ctrl = any(
+            unicodedata.category(c).startswith('C') and c not in '\n\r\t'
+            for c in text_res
+        )
+        if has_ctrl:
+            return data.hex()
+        return text_res
+    except UnicodeDecodeError:
+        return data.hex()
+    except Exception:
+        return data.hex()
+
 class AesPure:
     """AES (Advanced Encryption Standard) 纯Python实现"""
     
@@ -410,7 +435,8 @@ class AesPureEncoders:
     @staticmethod
     def decrypt(data: str, key: str, mode: str = 'ECB', iv: str = '', padding: str = 'pkcs7', 
                 sbox=None, swap_key_schedule: bool = False, swap_data_round: bool = False,
-                key_type: str = 'utf-8', iv_type: str = 'utf-8', data_type: str = None) -> str:
+                key_type: str = 'utf-8', iv_type: str = 'utf-8', data_type: str = None,
+                output_format: str = None) -> str:
         """AES解密
         
         Args:
@@ -541,15 +567,4 @@ class AesPureEncoders:
                 pass  # 填充错误时返回原数据
         
         # 输出处理
-        try:
-            text_res = res.decode('utf-8')
-            import string
-            printable = set(string.printable)
-            has_weird = any(c not in printable and c not in ['\n', '\r', '\t'] for c in text_res)
-            if '\x00' in text_res or has_weird:
-                return decrypted.hex()
-            return text_res
-        except UnicodeDecodeError:
-            return res.hex()
-        except:
-            return res.hex()
+        return _format_binary_output(res, output_format)

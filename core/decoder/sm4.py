@@ -13,6 +13,31 @@ import os
 import hashlib
 
 
+def _format_binary_output(data: bytes, output_format: str = None) -> str:
+    fmt = (output_format or '').lower()
+    if fmt == 'hex':
+        return data.hex()
+    if fmt == 'base64':
+        return base64.b64encode(data).decode('utf-8')
+    if fmt == 'utf-8':
+        return data.decode('utf-8', errors='replace')
+
+    try:
+        text_res = data.decode('utf-8')
+        import unicodedata
+        has_ctrl = any(
+            unicodedata.category(c).startswith('C') and c not in '\n\r\t'
+            for c in text_res
+        )
+        if has_ctrl:
+            return data.hex()
+        return text_res
+    except UnicodeDecodeError:
+        return data.hex()
+    except Exception:
+        return data.hex()
+
+
 class SM4Encoders:
     """SM4加密算法实现"""
     
@@ -383,142 +408,117 @@ class SM4Encoders:
                    key_type: str = 'utf-8', iv_type: str = 'utf-8', 
                    swap_key_schedule: bool = False, swap_data_round: bool = False,
                    swap_endian: bool = False,
-                   data_type: str = None) -> str:
+                   data_type: str = None, output_format: str = None) -> str:
         """SM4解密"""
-        if not data: return ""
-        
+        if not data:
+            return ""
+
         if swap_endian:
             swap_key_schedule = True
             swap_data_round = True
-        
+
         if key_type.lower() == 'hex':
             try:
-                k_str = key.replace(' ', '')
-                key_bytes = bytes.fromhex(k_str)
-            except:
+                key_bytes = bytes.fromhex(key.replace(' ', ''))
+            except Exception:
                 raise ValueError("密钥不是有效的Hex字符串")
         else:
             key_bytes = hashlib.md5(key.encode('utf-8')).digest()
 
         custom_sbox = SM4Encoders._parse_sbox(sbox)
-        
-        # DATA HANDLING
+
         try:
-             if data_type and data_type.lower() == 'hex':
-                 d_str = data.replace(' ', '').replace('\n', '')
-                 encrypted_data = bytes.fromhex(d_str)
-             elif data_type and data_type.lower() == 'base64':
-                 encrypted_data = base64.b64decode(data)
-             else:
-                 encrypted_data = base64.b64decode(data)
+            if data_type and data_type.lower() == 'hex':
+                encrypted_data = bytes.fromhex(data.replace(' ', '').replace('\n', ''))
+            elif data_type and data_type.lower() == 'base64':
+                encrypted_data = base64.b64decode(data)
+            else:
+                encrypted_data = base64.b64decode(data)
         except Exception as e:
-             if data_type: raise ValueError(f"输入数据解析失败 ({data_type}): {str(e)}")
-             return ""
+            if data_type:
+                raise ValueError(f"输入数据解析失败 ({data_type}): {str(e)}")
+            return ""
 
         mode = mode.upper()
-        
-        # ... IV Handling ...
         iv_bytes = None
         data_content = encrypted_data
-        
+
         if mode in ['CBC', 'CFB', 'OFB', 'CTR']:
-             if iv:
-                  if iv_type.lower() == 'hex':
-                      try:
-                          i_str = iv.replace(' ', '')
-                          iv_bytes = bytes.fromhex(i_str)
-                          if len(iv_bytes) != 16:
-                               raise ValueError("IV Hex长度必须为16字节")
-                      except ValueError as e:
-                          raise e
-                      except:
-                          raise ValueError("IV不是有效的Hex字符串")
-                  else:
-                      iv_bytes = hashlib.md5(iv.encode('utf-8')).digest()
-             else:
-                  if len(encrypted_data) < 16: return ""
-                  iv_bytes = encrypted_data[:16]
-                  data_content = encrypted_data[16:]
-                  
+            if iv:
+                if iv_type.lower() == 'hex':
+                    try:
+                        iv_bytes = bytes.fromhex(iv.replace(' ', ''))
+                        if len(iv_bytes) != 16:
+                            raise ValueError("IV Hex长度必须为16字节")
+                    except ValueError as e:
+                        raise e
+                    except Exception:
+                        raise ValueError("IV不是有效的Hex字符串")
+                else:
+                    iv_bytes = hashlib.md5(iv.encode('utf-8')).digest()
+            else:
+                if len(encrypted_data) < 16:
+                    return ""
+                iv_bytes = encrypted_data[:16]
+                data_content = encrypted_data[16:]
+
         sm4 = SM4Encoders(custom_sbox)
         if mode in ['ECB', 'CBC']:
-             sm4.set_key(key_bytes, 1, swap_key_schedule=swap_key_schedule, swap_data_round=swap_data_round) 
+            sm4.set_key(key_bytes, 1, swap_key_schedule=swap_key_schedule, swap_data_round=swap_data_round)
         else:
-             sm4.set_key(key_bytes, 0, swap_key_schedule=swap_key_schedule, swap_data_round=swap_data_round)
-        
+            sm4.set_key(key_bytes, 0, swap_key_schedule=swap_key_schedule, swap_data_round=swap_data_round)
+
         decrypted = b''
-        
+
         if mode == 'ECB':
-             for i in range(0, len(data_content), 16):
-                  block = data_content[i:i+16]
-                  decrypted += sm4.one_round(block)
-                  
+            for i in range(0, len(data_content), 16):
+                block = data_content[i:i+16]
+                decrypted += sm4.one_round(block)
+
         elif mode == 'CBC':
-             last_block = iv_bytes
-             for i in range(0, len(data_content), 16):
-                  block = data_content[i:i+16]
-                  output_block = sm4.one_round(block)
-                  plain_block = bytes([a ^ b for a, b in zip(output_block, last_block)])
-                  decrypted += plain_block
-                  last_block = block
-                  
+            last_block = iv_bytes
+            for i in range(0, len(data_content), 16):
+                block = data_content[i:i+16]
+                output_block = sm4.one_round(block)
+                plain_block = bytes([a ^ b for a, b in zip(output_block, last_block)])
+                decrypted += plain_block
+                last_block = block
+
         elif mode == 'CTR':
-             ctr = int.from_bytes(iv_bytes, byteorder='big')
-             for i in range(0, len(data_content), 16):
-                  block = data_content[i:i+16]
-                  ctr_block = ctr.to_bytes(16, byteorder='big')
-                  keystream = sm4.one_round(ctr_block)
-                  chunk_len = len(block)
-                  plain_chunk = bytes([a ^ b for a, b in zip(block, keystream[:chunk_len])])
-                  decrypted += plain_chunk
-                  ctr += 1
-                  
+            ctr = int.from_bytes(iv_bytes, byteorder='big')
+            for i in range(0, len(data_content), 16):
+                block = data_content[i:i+16]
+                ctr_block = ctr.to_bytes(16, byteorder='big')
+                keystream = sm4.one_round(ctr_block)
+                chunk_len = len(block)
+                plain_chunk = bytes([a ^ b for a, b in zip(block, keystream[:chunk_len])])
+                decrypted += plain_chunk
+                ctr += 1
+
         elif mode == 'OFB':
-             last_iv = iv_bytes
-             for i in range(0, len(data_content), 16):
-                  block = data_content[i:i+16]
-                  keystream = sm4.one_round(last_iv)
-                  chunk_len = len(block)
-                  plain_chunk = bytes([a ^ b for a, b in zip(block, keystream[:chunk_len])])
-                  decrypted += plain_chunk
-                  last_iv = keystream
-                  
+            last_iv = iv_bytes
+            for i in range(0, len(data_content), 16):
+                block = data_content[i:i+16]
+                keystream = sm4.one_round(last_iv)
+                chunk_len = len(block)
+                plain_chunk = bytes([a ^ b for a, b in zip(block, keystream[:chunk_len])])
+                decrypted += plain_chunk
+                last_iv = keystream
+
         elif mode == 'CFB':
-             last_block = iv_bytes
-             for i in range(0, len(data_content), 16):
-                  block = data_content[i:i+16]
-                  keystream = sm4.one_round(last_block)
-                  chunk_len = len(block)
-                  plain_chunk = bytes([a ^ b for a, b in zip(block, keystream[:chunk_len])])
-                  decrypted += plain_chunk
-                  if chunk_len == 16:
-                      last_block = block # Ciphertext
-                  
+            last_block = iv_bytes
+            for i in range(0, len(data_content), 16):
+                block = data_content[i:i+16]
+                keystream = sm4.one_round(last_block)
+                chunk_len = len(block)
+                plain_chunk = bytes([a ^ b for a, b in zip(block, keystream[:chunk_len])])
+                decrypted += plain_chunk
+                if chunk_len == 16:
+                    last_block = block
+
         is_stream = mode in ['CFB', 'OFB', 'CTR']
-        
         final_bytes = decrypted
         if not is_stream:
-             final_bytes = SM4Encoders._unpad_data(decrypted, padding)
-             
-        # Decode and Format Logic
-        try:
-             text_res = final_bytes.decode('utf-8')
-             # Check for control characters (excluding standard whitespace)
-             # If invisible chars exist, return repr() or Maybe Hex?
-             # User previously requested repr for invisible chars.
-             # But repr breaks the "Copy-Paste" round trip for Hex users.
-             # Let's use repr ONLY if it WAS decoded successfully but has weird chars.
-             import string
-             printable = set(string.printable)
-             has_weird = any(c not in printable and c not in ['\n', '\r', '\t'] for c in text_res)
-             
-             if '\x00' in text_res or has_weird:
-                  return decrypted.hex()
-             
-             return text_res
-        except UnicodeDecodeError:
-             # Fallback to Hex string for binary data
-             # This allows the user to copy the output and use it as Hex input
-             return final_bytes.hex()
-        except:
-             return final_bytes.hex()
+            final_bytes = SM4Encoders._unpad_data(decrypted, padding)
+
+        return _format_binary_output(final_bytes, output_format)

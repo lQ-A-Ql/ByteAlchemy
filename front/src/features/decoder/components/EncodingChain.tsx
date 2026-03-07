@@ -18,6 +18,7 @@ interface EncodingChainProps {
   onUpdateParams: (id: string, params: Record<string, any>) => void;
   onMove: (dragIndex: number, hoverIndex: number) => void;
   onToggle: (id: string) => void;
+  onClear?: () => void;
   sboxNames: string[];
   input: string;
   inputFormat: string;
@@ -105,23 +106,49 @@ const hasParams = (type: OperationType) => {
     type.includes('sha') || type === 'md5_hash' || type === 'xor_bytes' || type === 'known_plaintext_helper';
 };
 
-export function EncodingChain({ chain, onRemove, onUpdateParams, onMove, onToggle, sboxNames, input, inputFormat, inputPreprocess, onUpsertXorKey }: EncodingChainProps) {
-  return (
-    <div className="h-full bg-white/50 backdrop-blur-md rounded-3xl p-5 ring-1 ring-purple-200 flex flex-col">
-      <h2 className="text-base mb-3 text-gray-700 flex items-center gap-2 flex-shrink-0">
-        <div className="w-1 h-5 bg-gradient-to-b from-purple-500 to-pink-500 rounded-full"></div>
-        编码链
-        <span className="ml-auto text-xs text-gray-400">
-          {chain.length} 个操作
-        </span>
-      </h2>
+export function EncodingChain({ chain, onRemove, onUpdateParams, onMove, onToggle, onClear, sboxNames, input, inputFormat, inputPreprocess, onUpsertXorKey }: EncodingChainProps) {
+  const activeCount = chain.filter((operation) => operation.enabled).length;
+  const disabledCount = chain.length - activeCount;
 
-      <div className="flex-1 space-y-2 overflow-y-auto">
+  return (
+    <div className="h-full rounded-3xl bg-white/50 p-5 ring-1 ring-purple-200 backdrop-blur-md flex flex-col overflow-hidden">
+      <div className="mb-3 flex items-start justify-between gap-3 flex-shrink-0">
+        <div>
+          <h2 className="flex items-center gap-2 text-base text-gray-700">
+            <div className="h-5 w-1 rounded-full bg-gradient-to-b from-purple-500 to-pink-500"></div>
+            编码链
+          </h2>
+          <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+            <span className="rounded-full bg-purple-50 px-2.5 py-1 text-purple-700 ring-1 ring-purple-200">
+              总计 {chain.length}
+            </span>
+            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700 ring-1 ring-emerald-200">
+              已启用 {activeCount}
+            </span>
+            {disabledCount > 0 && (
+              <span className="rounded-full bg-slate-50 px-2.5 py-1 text-slate-600 ring-1 ring-slate-200">
+                已停用 {disabledCount}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {chain.length > 0 && onClear && (
+          <button
+            onClick={onClear}
+            className="rounded-xl bg-white/80 px-3 py-1.5 text-xs font-medium text-gray-600 ring-1 ring-purple-100 transition-all hover:bg-purple-50 hover:text-purple-700"
+          >
+            清空
+          </button>
+        )}
+      </div>
+
+      <div className="flex-1 space-y-2 overflow-y-auto pr-1">
         {chain.length === 0 ? (
           <div className="h-full flex items-center justify-center text-center px-4">
-            <div className="text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-2xl p-6 w-full">
-              <div className="mb-2">点击左侧操作</div>
-              <div>添加到编码链</div>
+            <div className="w-full rounded-2xl border-2 border-dashed border-gray-200 p-6 text-sm text-gray-400">
+              <div className="mb-2">从左侧选择算子，构建你的操作链。</div>
+              <div className="text-xs text-gray-350">支持拖拽排序、折叠参数与按步骤启用 / 停用。</div>
             </div>
           </div>
         ) : (
