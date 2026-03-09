@@ -47,21 +47,21 @@ function flushPendingTerminalActions() {
     }
 }
 
-// Light theme
-const lightTheme = {
-    background: '#ffffff',
-    foreground: '#2c3e50',
-    cursor: '#2c3e50',
-    cursorAccent: '#ffffff',
-    selection: 'rgba(44, 62, 80, 0.2)',
-    black: '#000000',
-    red: '#e74c3c',
-    green: '#27ae60',
-    yellow: '#f1c40f',
-    blue: '#2980b9',
-    magenta: '#8e44ad',
-    cyan: '#16a085',
-    white: '#ecf0f1',
+// High contrast dark theme
+const terminalTheme = {
+    background: '#0b1220',
+    foreground: '#d7e3ff',
+    cursor: '#7dd3fc',
+    cursorAccent: '#0b1220',
+    selection: 'rgba(125, 211, 252, 0.28)',
+    black: '#0b1220',
+    red: '#f87171',
+    green: '#4ade80',
+    yellow: '#facc15',
+    blue: '#60a5fa',
+    magenta: '#c084fc',
+    cyan: '#22d3ee',
+    white: '#e5e7eb',
 };
 
 export function XTermTerminal() {
@@ -178,7 +178,7 @@ export function XTermTerminal() {
             cursorBlink: true,
             fontSize: 14,
             fontFamily: "'JetBrains Mono', 'Consolas', monospace",
-            theme: lightTheme,
+            theme: terminalTheme,
             allowTransparency: false,
             scrollback: 1000,
             convertEol: true,
@@ -189,7 +189,16 @@ export function XTermTerminal() {
         term.loadAddon(fit);
         term.loadAddon(new WebLinksAddon());
 
+        term.attachCustomKeyEventHandler((event) => {
+            if (event.type === 'keydown' && event.key === 'Enter') {
+                sendInput('\r\n');
+                return false;
+            }
+            return true;
+        });
+
         term.open(terminalRef.current);
+        term.focus();
         terminalInstance.current = term;
 
         const handleResize = () => {
@@ -218,6 +227,21 @@ export function XTermTerminal() {
         setTimeout(doFit, 50);
 
         term.onData((data) => {
+            if (data === '\r') {
+                sendInput('\r\n');
+                return;
+            }
+
+            if (data === '\u007f') {
+                term.write('\b \b');
+                sendInput(data);
+                return;
+            }
+
+            if (data.length === 1 && data >= ' ' && data !== '\u007f') {
+                term.write(data);
+            }
+
             sendInput(data);
         });
 
@@ -268,7 +292,11 @@ export function XTermTerminal() {
                 </div>
             </div>
 
-            <div ref={terminalRef} className="flex-1 min-h-0 bg-white p-2" />
+            <div
+                ref={terminalRef}
+                className="flex-1 min-h-0 bg-slate-950 p-2"
+                onClick={() => terminalInstance.current?.focus()}
+            />
         </div>
     );
 }

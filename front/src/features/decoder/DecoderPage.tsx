@@ -239,7 +239,7 @@ export function DecoderPage() {
 
   return (
     <DndProvider backend={HTML5Backend}>
-      <div className="h-full flex flex-col gap-4 p-4 xl:p-6">
+      <div className="h-full min-h-0 min-w-0 overflow-auto flex flex-col gap-4 p-4 xl:p-6">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
           <div className="space-y-3">
             <div className="inline-flex items-center gap-3 rounded-full border border-pink-200/50 bg-gradient-to-r from-pink-500/10 via-rose-500/10 to-pink-500/10 px-5 py-2.5 backdrop-blur-sm">
@@ -304,12 +304,12 @@ export function DecoderPage() {
           </div>
         </div>
 
-        <div className="grid flex-1 min-h-0 gap-4 xl:grid-cols-[minmax(17rem,19rem)_minmax(22rem,25rem)_minmax(0,1fr)] 2xl:grid-cols-[minmax(17rem,19rem)_minmax(22rem,25rem)_minmax(0,1fr)_minmax(19rem,22rem)]">
-          <div className="min-h-[20rem] xl:min-h-0">
+        <div className="grid flex-1 min-h-0 min-w-0 gap-4 xl:grid-cols-[minmax(14rem,19rem)_minmax(16rem,25rem)_minmax(0,1fr)] 2xl:grid-cols-[minmax(14rem,19rem)_minmax(16rem,25rem)_minmax(0,1fr)_minmax(16rem,22rem)]">
+          <div className="min-h-[20rem] min-w-0 xl:min-h-0">
             <EncodingTypesList onAddToChain={addToChain} />
           </div>
 
-          <div className="min-h-[20rem] xl:min-h-0">
+          <div className="min-h-[20rem] min-w-0 xl:min-h-0">
             <EncodingChain
               chain={chain}
               onRemove={removeFromChain}
@@ -325,7 +325,7 @@ export function DecoderPage() {
             />
           </div>
 
-          <div className="min-h-[28rem] xl:min-h-0">
+          <div className="min-h-[28rem] min-w-0 xl:min-h-0">
             <OperationArea
               input={input}
               output={output}
@@ -345,7 +345,7 @@ export function DecoderPage() {
                 animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
                 exit={{ opacity: 0, x: 28, y: 8, scale: 0.97 }}
                 transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-                className="min-h-[18rem] xl:col-span-3 2xl:col-span-1 2xl:min-h-0"
+                className="min-h-[18rem] min-w-0 xl:col-span-3 2xl:col-span-1 2xl:min-h-0"
               >
                 <AssistPanel
                   inputPreprocess={inputPreprocess}

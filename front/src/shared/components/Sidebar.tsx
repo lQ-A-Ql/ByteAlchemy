@@ -19,7 +19,7 @@ const menuItems = [
 
 export function Sidebar({ activeTab, onTabChange, logoSrc }: SidebarProps) {
   return (
-    <aside className="w-24 bg-white/70 backdrop-blur-md shadow-2xl flex flex-col items-center py-8 border-r border-pink-100/60 relative overflow-hidden z-10">
+    <aside className="w-20 sm:w-24 h-full shrink-0 bg-white/70 backdrop-blur-md shadow-2xl flex flex-col items-center py-6 sm:py-8 border-r border-pink-100/60 relative overflow-hidden z-10">
       {/* Decorative Background Elements */}
       <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-pink-100/30 to-transparent pointer-events-none"></div>
       <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-purple-100/30 to-transparent pointer-events-none"></div>

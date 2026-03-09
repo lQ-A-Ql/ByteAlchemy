@@ -180,7 +180,7 @@ export function ScriptPage() {
     };
 
     return (
-        <div className="h-full flex flex-col p-4">
+        <div className="h-full min-h-0 min-w-0 flex flex-col overflow-hidden p-4">
             {/* Header */}
             <div className="mb-3 flex-shrink-0">
                 <div className="inline-flex items-center gap-3 px-5 py-2.5 bg-gradient-to-r from-cyan-500/10 via-teal-500/10 to-cyan-500/10 rounded-full border border-cyan-200/50 backdrop-blur-sm">
@@ -189,7 +189,7 @@ export function ScriptPage() {
                 </div>
             </div>
 
-            <div className="flex gap-3 flex-1 min-h-0">
+            <div className="flex gap-3 flex-1 min-h-0 min-w-0 overflow-hidden">
                 {/* Script List - Narrower */}
                 <div className="w-48 flex-shrink-0 bg-white/50 backdrop-blur-md rounded-2xl p-3 ring-1 ring-cyan-200 flex flex-col">
                     <div className="flex items-center justify-between mb-2">
@@ -254,13 +254,13 @@ export function ScriptPage() {
                     </div>
 
                     {/* Tab Content */}
-                    <div className="flex-1 min-h-0">
+                    <div className="flex-1 min-h-0 min-w-0 overflow-hidden">
                         <div className={activeTab === 'terminal' ? 'h-full' : 'hidden'}>
                             <XTermTerminal />
                         </div>
-                        <div className={activeTab === 'script' ? 'h-full bg-white/50 backdrop-blur-md rounded-2xl p-4 ring-1 ring-cyan-200 flex flex-col' : 'hidden'}>
+                        <div className={activeTab === 'script' ? 'h-full min-h-0 min-w-0 overflow-hidden bg-white/50 backdrop-blur-md rounded-2xl p-4 ring-1 ring-cyan-200 flex flex-col' : 'hidden'}>
                                 {showNewForm ? (
-                                    <div className="flex flex-col h-full">
+                                    <div className="flex flex-col h-full min-h-0 min-w-0">
                                         <h3 className="text-sm font-medium text-gray-800 mb-2">新建脚本</h3>
                                         <input
                                             type="text"
@@ -276,7 +276,7 @@ export function ScriptPage() {
                                             placeholder="描述 (可选)"
                                             className="w-full px-3 py-1.5 mb-2 bg-white/60 border border-cyan-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 text-sm"
                                         />
-                                        <div className="mb-2 flex-1 min-h-0">
+                                        <div className="mb-2 flex-1 min-h-[320px] min-w-0">
                                             <CodeEditor value={editContent} onChange={setEditContent} height="100%" />
                                         </div>
                                         <div className="flex gap-2">
@@ -289,7 +289,7 @@ export function ScriptPage() {
                                         </div>
                                     </div>
                                 ) : selectedScript ? (
-                                    <div className="flex flex-col h-full">
+                                    <div className="flex flex-col h-full min-h-0 min-w-0">
                                         {isEditing ? (
                                             <>
                                                 <div className="flex gap-2 mb-2">
@@ -308,7 +308,7 @@ export function ScriptPage() {
                                                         className="flex-[2] px-3 py-1.5 bg-white/60 border border-cyan-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 text-sm"
                                                     />
                                                 </div>
-                                                <div className="mb-2 flex-1 min-h-0">
+                                                <div className="mb-2 flex-1 min-h-[320px] min-w-0">
                                                     <CodeEditor value={editContent} onChange={setEditContent} height="100%" />
                                                 </div>
                                                 <div className="flex justify-end gap-2">
@@ -340,7 +340,7 @@ export function ScriptPage() {
                                                         </button>
                                                     </div>
                                                 </div>
-                                                <div className="flex-1 min-h-0">
+                                                <div className="flex-1 min-h-[320px] min-w-0">
                                                     <CodeEditor value={selectedScript.content || ''} onChange={() => { }} readOnly height="100%" />
                                                 </div>
                                             </>

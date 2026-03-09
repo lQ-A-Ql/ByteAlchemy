@@ -17,6 +17,17 @@ from websockets.exceptions import ConnectionClosed
 
 IS_WINDOWS = os.name == "nt"
 
+WINPTY_AVAILABLE = False
+PtyProcess = None
+
+if IS_WINDOWS:
+    try:
+        from winpty import PtyProcess as WinPtyProcess
+        PtyProcess = WinPtyProcess
+        WINPTY_AVAILABLE = True
+    except Exception:
+        WINPTY_AVAILABLE = False
+
 if not IS_WINDOWS:
     import pty
     import fcntl
@@ -111,6 +122,8 @@ class WindowsTerminalSession:
     
     def __init__(self, shell: str = None):
         self.shell = shell or os.environ.get("COMSPEC", "cmd.exe")
+        self.pty = None
+        self.backend_mode = "subprocess-pipe"
         self.proc = None
         self.running = False
         self._queue = queue.Queue()
@@ -119,6 +132,20 @@ class WindowsTerminalSession:
     def start(self, rows: int = 24, cols: int = 80, cwd: str = None):
         """启动子进程会话 (无PTY)"""
         self.stop()
+
+        if WINPTY_AVAILABLE and PtyProcess is not None:
+            try:
+                self.pty = PtyProcess.spawn(self.shell, cwd=cwd)
+                self.backend_mode = "conpty"
+                self.running = True
+                self.resize(rows, cols)
+                self._reader_thread = threading.Thread(target=self._read_loop, daemon=True)
+                self._reader_thread.start()
+                return
+            except Exception:
+                self.pty = None
+                self.backend_mode = "subprocess-pipe"
+
         try:
             self.proc = subprocess.Popen(
                 [self.shell],
@@ -139,9 +166,25 @@ class WindowsTerminalSession:
         self._reader_thread.start()
     
     def _read_loop(self):
-        if not self.proc or not self.proc.stdout:
-            return
         try:
+            if self.pty is not None:
+                while self.running:
+                    try:
+                        chunk = self.pty.read(4096)
+                    except Exception:
+                        break
+                    if not chunk:
+                        time.sleep(0.01)
+                        continue
+                    if isinstance(chunk, str):
+                        self._queue.put(chunk.encode('utf-8', errors='replace'))
+                    else:
+                        self._queue.put(chunk)
+                return
+
+            if not self.proc or not self.proc.stdout:
+                return
+
             while self.running:
                 chunk = self.proc.stdout.read(1)
                 if not chunk:
@@ -153,14 +196,29 @@ class WindowsTerminalSession:
             self.running = False
     
     def resize(self, rows: int, cols: int):
-        """Windows 子进程无PTY，忽略resize"""
+        """调整终端大小"""
+        if self.pty is not None:
+            try:
+                self.pty.setwinsize(rows, cols)
+            except Exception:
+                pass
         return
     
     def write(self, data: str):
         """向终端写入数据"""
+        if self.pty is not None and self.running:
+            try:
+                self.pty.write(data)
+            except Exception:
+                self.running = False
+            return
+
         if self.proc and self.proc.stdin and self.running:
             try:
-                self.proc.stdin.write(data.encode('utf-8'))
+                normalized = data
+                if normalized:
+                    normalized = normalized.replace('\r\n', '\n').replace('\r', '\n').replace('\n', '\r\n')
+                self.proc.stdin.write(normalized.encode('utf-8'))
                 self.proc.stdin.flush()
             except OSError:
                 self.running = False
@@ -185,6 +243,12 @@ class WindowsTerminalSession:
     def stop(self):
         """停止终端会话"""
         self.running = False
+        if self.pty is not None:
+            try:
+                self.pty.close()
+            except Exception:
+                pass
+            self.pty = None
         if self.proc:
             try:
                 self.proc.terminate()

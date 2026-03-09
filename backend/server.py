@@ -827,7 +827,8 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.close()
             return
 
-        await websocket.send_text("\033[1;32m[Terminal Ready - Integrated]\033[0m\r\n")
+        backend_mode = getattr(session, 'backend_mode', 'unknown')
+        await websocket.send_text(f"\033[1;32m[Terminal Ready - Integrated | {backend_mode}]\033[0m\r\n")
         
         # 启动发送任务
         send_task = asyncio.create_task(_send_loop())

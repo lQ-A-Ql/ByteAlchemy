@@ -10,7 +10,7 @@ interface CodeEditorProps {
 
 export function CodeEditor({ value, onChange, readOnly = false, height = '600px', wordWrap = 'on' }: CodeEditorProps) {
     return (
-        <div className="rounded-2xl overflow-hidden border border-cyan-200/70 bg-gradient-to-br from-white via-cyan-50/40 to-white shadow-lg ring-1 ring-cyan-100 h-full">
+        <div className="h-full min-h-[320px] min-w-0 rounded-2xl overflow-hidden border border-cyan-200/70 bg-gradient-to-br from-white via-cyan-50/40 to-white shadow-lg ring-1 ring-cyan-100">
             <Editor
                 height={height}
                 defaultLanguage="python"
@@ -21,6 +21,7 @@ export function CodeEditor({ value, onChange, readOnly = false, height = '600px'
                     readOnly,
                     minimap: { enabled: false },
                     fontSize: 14,
+                    lineHeight: 22,
                     fontFamily: "'JetBrains Mono', 'Consolas', 'Courier New', monospace",
                     lineNumbers: 'on',
                     scrollBeyondLastLine: false,

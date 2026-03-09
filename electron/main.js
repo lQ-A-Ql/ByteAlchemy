@@ -26,6 +26,15 @@ function createWindow() {
         },
     })
 
+    // Keep app zoom at 100% to avoid layout break under Chromium zoom scaling
+    mainWindow.webContents.setZoomFactor(1)
+    mainWindow.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {})
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+        if ((input.control || input.meta) && ['+', '=', '-', '0'].includes(input.key)) {
+            event.preventDefault()
+        }
+    })
+
     // Always load from React frontend
     const indexPath = path.join(__dirname, '../front/dist/index.html')
 

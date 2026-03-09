@@ -46,7 +46,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="size-full flex bg-gradient-to-br from-white via-pink-50 to-purple-50 relative">
+    <div className="size-full min-h-0 min-w-0 flex overflow-hidden bg-gradient-to-br from-white via-pink-50 to-purple-50 relative">
       {/* Global Wallpaper */}
       {bgImage && (
         <div

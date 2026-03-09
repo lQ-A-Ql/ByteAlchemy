@@ -7,3 +7,4 @@ requests
 websockets
 ptyprocess
 psutil
+pywinpty

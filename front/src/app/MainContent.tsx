@@ -33,15 +33,18 @@ export function MainContent({ activeTab }: MainContentProps) {
   };
 
   const isFullHeightPage = activeTab === 'decoder' || activeTab === 'keyreconstruct' || activeTab === 'script';
+  const fullHeightWrapperClass = activeTab === 'decoder'
+    ? 'min-h-full min-w-0 overflow-auto'
+    : 'h-full min-h-0 min-w-0 overflow-hidden';
 
   return (
-    <main className="flex-1 h-full overflow-auto relative z-10">
+    <main className="flex-1 min-w-0 min-h-0 overflow-auto relative z-10">
       {isFullHeightPage ? (
-        <div className="h-full overflow-hidden">
+        <div className={fullHeightWrapperClass}>
           {renderContent()}
         </div>
       ) : (
-        <div className="min-h-full p-10">
+        <div className="min-h-full p-4 sm:p-6 lg:p-10">
           {renderContent()}
         </div>
       )}
