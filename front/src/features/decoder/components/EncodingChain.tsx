@@ -1,16 +1,24 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
-import { Binary, Lock, X, GripVertical, Settings2, Hash, Link, Code2, Type, Shield, ShieldCheck, Key, Fingerprint, ChevronDown } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import {
+  Binary,
+  ChevronDown,
+  Code2,
+  Fingerprint,
+  GripVertical,
+  Hash,
+  Key,
+  Link,
+  Lock,
+  Shield,
+  ShieldCheck,
+  Type,
+  X,
+} from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import type { OperationType } from './EncodingTypesList';
+import type { EncodingOperation } from '@/features/decoder/types';
 import { MiniSelect } from '@/shared/components/CustomSelect';
-
-export interface EncodingOperation {
-  id: string;
-  type: OperationType;
-  params: Record<string, any>;
-  enabled: boolean;
-}
 
 interface EncodingChainProps {
   chain: EncodingOperation[];
@@ -85,7 +93,7 @@ const labelMap: Record<string, string> = {
   html_encode: 'HTML 编码', html_decode: 'HTML 解码',
   unicode_encode: 'Unicode 编码', unicode_decode: 'Unicode 解码',
   md5_hash: 'MD5 哈希', sha1_hash: 'SHA1 哈希', sha256_hash: 'SHA256 哈希', sha512_hash: 'SHA512 哈希',
-  xor_bytes: 'XOR (重复密钥)', known_plaintext_helper: '已知明文助手',
+  xor_bytes: 'XOR 字节处理', known_plaintext_helper: '已知明文辅助',
   rc4_encrypt: 'RC4 加密', rc4_decrypt: 'RC4 解密',
   chacha20_encrypt: 'ChaCha20 加密', chacha20_decrypt: 'ChaCha20 解密',
   salsa20_encrypt: 'Salsa20 加密', salsa20_decrypt: 'Salsa20 解密',
@@ -98,25 +106,45 @@ const labelMap: Record<string, string> = {
   sm4_encrypt: 'SM4 加密', sm4_decrypt: 'SM4 解密',
 };
 
-// Check if operation needs parameters
-const hasParams = (type: OperationType) => {
-  return type.includes('aes') || type.includes('sm4') || type.includes('des') ||
-    type.includes('rc4') || type.includes('blowfish') || type.includes('cast') ||
-    type.includes('arc2') || type.includes('chacha20') || type.includes('salsa20') ||
-    type.includes('sha') || type === 'md5_hash' || type === 'xor_bytes' || type === 'known_plaintext_helper';
-};
+const hasParams = (type: OperationType) => (
+  type.includes('aes')
+  || type.includes('sm4')
+  || type.includes('des')
+  || type.includes('rc4')
+  || type.includes('blowfish')
+  || type.includes('cast')
+  || type.includes('arc2')
+  || type.includes('chacha20')
+  || type.includes('salsa20')
+  || type.includes('sha')
+  || type === 'md5_hash'
+  || type === 'xor_bytes'
+  || type === 'known_plaintext_helper'
+);
 
-export function EncodingChain({ chain, onRemove, onUpdateParams, onMove, onToggle, onClear, sboxNames, input, inputFormat, inputPreprocess, onUpsertXorKey }: EncodingChainProps) {
+export function EncodingChain({
+  chain,
+  onRemove,
+  onUpdateParams,
+  onMove,
+  onToggle,
+  onClear,
+  sboxNames,
+  input,
+  inputFormat,
+  inputPreprocess,
+  onUpsertXorKey,
+}: EncodingChainProps) {
   const activeCount = chain.filter((operation) => operation.enabled).length;
   const disabledCount = chain.length - activeCount;
 
   return (
-    <div className="h-full rounded-3xl bg-white/50 p-5 ring-1 ring-purple-200 backdrop-blur-md flex flex-col overflow-hidden">
-      <div className="mb-3 flex items-start justify-between gap-3 flex-shrink-0">
+    <div className="flex h-full flex-col overflow-hidden rounded-[28px] border border-white/70 bg-white/80 p-5 shadow-lg backdrop-blur-md">
+      <div className="mb-4 flex flex-shrink-0 items-start justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-base text-gray-700">
-            <div className="h-5 w-1 rounded-full bg-gradient-to-b from-purple-500 to-pink-500"></div>
-            编码链
+          <h2 className="flex items-center gap-2 text-base font-medium text-slate-800">
+            <div className="h-5 w-1 rounded-full bg-gradient-to-b from-purple-500 to-pink-500" />
+            操作链
           </h2>
           <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
             <span className="rounded-full bg-purple-50 px-2.5 py-1 text-purple-700 ring-1 ring-purple-200">
@@ -136,19 +164,19 @@ export function EncodingChain({ chain, onRemove, onUpdateParams, onMove, onToggl
         {chain.length > 0 && onClear && (
           <button
             onClick={onClear}
-            className="rounded-xl bg-white/80 px-3 py-1.5 text-xs font-medium text-gray-600 ring-1 ring-purple-100 transition-all hover:bg-purple-50 hover:text-purple-700"
+            className="rounded-xl bg-white px-3 py-1.5 text-xs font-medium text-slate-600 ring-1 ring-purple-100 transition-all hover:bg-purple-50 hover:text-purple-700"
           >
-            清空
+            清空链路
           </button>
         )}
       </div>
 
       <div className="flex-1 space-y-2 overflow-y-auto pr-1">
         {chain.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-center px-4">
-            <div className="w-full rounded-2xl border-2 border-dashed border-gray-200 p-6 text-sm text-gray-400">
-              <div className="mb-2">从左侧选择算子，构建你的操作链。</div>
-              <div className="text-xs text-gray-350">支持拖拽排序、折叠参数与按步骤启用 / 停用。</div>
+          <div className="flex h-full items-center justify-center px-4 text-center">
+            <div className="w-full rounded-2xl border-2 border-dashed border-slate-200 p-6 text-sm text-slate-400">
+              <div className="mb-2">从左侧挑选操作，逐步拼出你的解码链路。</div>
+              <div className="text-xs text-slate-350">支持拖拽排序、折叠参数面板，以及逐步启用或停用。</div>
             </div>
           </div>
         ) : (
@@ -195,11 +223,23 @@ interface ChainItemProps {
   onUpsertXorKey: (keyHex: string) => void;
 }
 
-function ChainItem({ operation, index, onRemove, onUpdateParams, onMove, onToggle, sboxNames, input, inputFormat, inputPreprocess, onUpsertXorKey }: ChainItemProps) {
+function ChainItem({
+  operation,
+  index,
+  onRemove,
+  onUpdateParams,
+  onMove,
+  onToggle,
+  sboxNames,
+  input,
+  inputFormat,
+  inputPreprocess,
+  onUpsertXorKey,
+}: ChainItemProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [showParams, setShowParams] = useState(false);
 
-  const [{ isDragging }, drag, preview] = useDrag({
+  const [{ isDragging }, drag] = useDrag({
     type: 'CHAIN_ITEM',
     item: { index },
     collect: (monitor) => ({
@@ -210,10 +250,16 @@ function ChainItem({ operation, index, onRemove, onUpdateParams, onMove, onToggl
   const [, drop] = useDrop({
     accept: 'CHAIN_ITEM',
     hover: (item: { index: number }) => {
-      if (!ref.current) return;
+      if (!ref.current) {
+        return;
+      }
+
       const dragIndex = item.index;
       const hoverIndex = index;
-      if (dragIndex === hoverIndex) return;
+      if (dragIndex === hoverIndex) {
+        return;
+      }
+
       onMove(dragIndex, hoverIndex);
       item.index = hoverIndex;
     },
@@ -222,64 +268,62 @@ function ChainItem({ operation, index, onRemove, onUpdateParams, onMove, onToggl
   drag(drop(ref));
 
   const Icon = iconMap[operation.type] || Binary;
-  const color = colorMap[operation.type] || 'from-gray-500 to-gray-600';
+  const color = colorMap[operation.type] || 'from-slate-500 to-slate-600';
   const label = labelMap[operation.type] || operation.type;
   const showSettings = hasParams(operation.type);
 
   return (
     <motion.div
       ref={ref}
-      className={`bg-white/80 rounded-xl ring-1 ring-purple-100 transition-all duration-200 ${isDragging ? 'opacity-50 scale-95' : 'hover:ring-2 hover:ring-purple-300 hover:shadow-md'
-        } ${!operation.enabled ? 'opacity-50' : ''}`}
+      className={`rounded-2xl border border-purple-100 bg-white/90 transition-all duration-200 ${
+        isDragging ? 'scale-95 opacity-50' : 'hover:border-purple-200 hover:shadow-md'
+      } ${!operation.enabled ? 'opacity-60' : ''}`}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: -20 }}
     >
       <div className="p-3">
         <div className="flex items-center gap-2">
-          {/* Drag Handle */}
-          <div className="cursor-move text-gray-400 hover:text-purple-500 transition-colors">
-            <GripVertical className="w-4 h-4" />
+          <div className="cursor-move text-slate-400 transition-colors hover:text-purple-500">
+            <GripVertical className="h-4 w-4" />
           </div>
 
-          {/* Icon */}
-          <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${color} flex items-center justify-center flex-shrink-0 shadow-sm`}>
-            <Icon className="w-4 h-4 text-white" strokeWidth={2.5} />
+          <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${color} shadow-sm`}>
+            <Icon className="h-4 w-4 text-white" strokeWidth={2.5} />
           </div>
 
-          {/* Content */}
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-gray-800 truncate">{label}</div>
-            <div className="text-xs text-gray-400">步骤 {index + 1}</div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium text-slate-800">{label}</div>
+            <div className="text-xs text-slate-400">步骤 {index + 1}</div>
           </div>
 
-          {/* Actions */}
           <div className="flex items-center gap-1">
-            {/* Enable/Disable Switch */}
             <button
               onClick={() => onToggle(operation.id)}
-              className={`w-8 h-5 rounded-full transition-colors ${operation.enabled ? 'bg-purple-500' : 'bg-gray-300'}`}
+              className={`h-5 w-8 rounded-full transition-colors ${operation.enabled ? 'bg-purple-500' : 'bg-slate-300'}`}
+              title={operation.enabled ? '停用步骤' : '启用步骤'}
             >
-              <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${operation.enabled ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+              <div className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${operation.enabled ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
             </button>
             {showSettings && (
               <button
                 onClick={() => setShowParams(!showParams)}
-                className={`p-1 rounded-lg hover:bg-purple-100 transition-colors ${showParams ? 'text-purple-600 bg-purple-100' : 'text-gray-500'}`}
+                className={`rounded-lg p-1 transition-colors ${showParams ? 'bg-purple-100 text-purple-600' : 'text-slate-500 hover:bg-purple-100'}`}
+                title={showParams ? '收起参数' : '展开参数'}
               >
-                <ChevronDown className={`w-4 h-4 transition-transform ${showParams ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`h-4 w-4 transition-transform ${showParams ? 'rotate-180' : ''}`} />
               </button>
             )}
             <button
               onClick={() => onRemove(operation.id)}
-              className="p-1 rounded-lg hover:bg-red-100 text-gray-500 hover:text-red-600 transition-colors"
+              className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-red-100 hover:text-red-600"
+              title="删除步骤"
             >
-              <X className="w-4 h-4" />
+              <X className="h-4 w-4" />
             </button>
           </div>
         </div>
 
-        {/* Parameters Panel */}
         <AnimatePresence>
           {showParams && showSettings && (
             <motion.div
@@ -289,7 +333,7 @@ function ChainItem({ operation, index, onRemove, onUpdateParams, onMove, onToggl
               transition={{ duration: 0.2 }}
               className="overflow-hidden"
             >
-              <div className="mt-3 pt-3 border-t border-purple-100 space-y-2">
+              <div className="mt-3 space-y-2 border-t border-purple-100 pt-3">
                 <ParamsPanel
                   operation={operation}
                   onUpdateParams={onUpdateParams}
@@ -323,15 +367,23 @@ interface ParamsPanelProps {
   onUpsertXorKey: (keyHex: string) => void;
 }
 
-function ParamsPanel({ operation, onUpdateParams, sboxNames, input, inputFormat, inputPreprocess, onUpsertXorKey }: ParamsPanelProps) {
+function ParamsPanel({
+  operation,
+  onUpdateParams,
+  sboxNames,
+  input,
+  inputFormat,
+  inputPreprocess,
+  onUpsertXorKey,
+}: ParamsPanelProps) {
   const { type, params, id } = operation;
   const update = (key: string, value: any) => onUpdateParams(id, { ...params, [key]: value });
 
-  const inputClass = "w-full px-2 py-1.5 text-xs bg-white/60 border border-purple-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-400";
-  const labelClass = "text-xs text-gray-600 mb-1";
+  const inputClass = 'w-full rounded-lg border border-purple-200 bg-white/70 px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400';
+  const labelClass = 'mb-1 block text-xs text-slate-600';
 
   const typeOptions = [
-    { value: 'utf-8', label: 'UTF-8' },
+    { value: 'utf-8', label: 'UTF-8 文本' },
     { value: 'hex', label: 'HEX' },
   ];
 
@@ -343,100 +395,116 @@ function ParamsPanel({ operation, onUpdateParams, sboxNames, input, inputFormat,
   const saltPositionOptions = [
     { value: 'prefix', label: '前缀' },
     { value: 'suffix', label: '后缀' },
-    { value: 'both', label: '前后' },
+    { value: 'both', label: '前后都加' },
   ];
 
-  const modeOptions = ['ECB', 'CBC', 'CFB', 'OFB', 'CTR'].map(m => ({ value: m, label: m }));
-  const paddingOptions = ['pkcs7', 'zeropadding', 'iso10126', 'ansix923', 'nopadding'].map(p => ({ value: p, label: p }));
-  const sboxOptions = sboxNames.map(name => ({ value: name, label: name }));
+  const modeOptions = ['ECB', 'CBC', 'CFB', 'OFB', 'CTR'].map((value) => ({ value, label: value }));
+  const paddingOptions = ['pkcs7', 'zeropadding', 'iso10126', 'ansix923', 'nopadding'].map((value) => ({ value, label: value }));
+  const sboxOptions = sboxNames.map((name) => ({ value: name, label: name }));
   const xorOutputOptions = [
     { value: 'hex', label: 'HEX' },
-    { value: 'utf-8', label: 'UTF-8' },
+    { value: 'utf-8', label: 'UTF-8 文本' },
   ];
 
   const magicPresets = [
     { id: 'custom', label: '自定义', hex: '' },
-    { id: 'png', label: 'PNG', hex: '89504e470d0a1a0a' },
-    { id: 'zip', label: 'ZIP', hex: '504b0304' },
-    { id: 'elf', label: 'ELF', hex: '7f454c46' },
-    { id: 'pe', label: 'PE', hex: '4d5a' },
-    { id: 'jpg', label: 'JPEG', hex: 'ffd8ffe0' },
-    { id: 'gzip', label: 'GZIP', hex: '1f8b08' },
-    { id: 'pdf', label: 'PDF', hex: '25504446' },
+    { id: 'png', label: 'PNG 头部', hex: '89504e470d0a1a0a' },
+    { id: 'zip', label: 'ZIP 头部', hex: '504b0304' },
+    { id: 'elf', label: 'ELF 头部', hex: '7f454c46' },
+    { id: 'pe', label: 'PE 头部', hex: '4d5a' },
+    { id: 'jpg', label: 'JPEG 头部', hex: 'ffd8ffe0' },
+    { id: 'gzip', label: 'GZIP 头部', hex: '1f8b08' },
+    { id: 'pdf', label: 'PDF 头部', hex: '25504446' },
   ];
 
   const normalizeHex = (value: string) => {
     let result = value;
-    if (inputPreprocess.stripHexPrefix) result = result.replace(/0x/gi, '');
-    if (inputPreprocess.stripHexEscape) result = result.replace(/\\x/gi, '');
-    if (inputPreprocess.removeSeparators) result = result.replace(/[^0-9a-fA-F]/g, '');
-    if (inputPreprocess.autoPadOdd && result.length % 2 !== 0) result = `0${result}`;
+    if (inputPreprocess.stripHexPrefix) {
+      result = result.replace(/0x/gi, '');
+    }
+    if (inputPreprocess.stripHexEscape) {
+      result = result.replace(/\\x/gi, '');
+    }
+    if (inputPreprocess.removeSeparators) {
+      result = result.replace(/[^0-9a-fA-F]/g, '');
+    }
+    if (inputPreprocess.autoPadOdd && result.length % 2 !== 0) {
+      result = `0${result}`;
+    }
     return result;
   };
 
   const hexToBytes = (hex: string) => {
     const clean = hex.replace(/0x/gi, '').replace(/\\x/gi, '').replace(/[^0-9a-fA-F]/g, '');
-    if (clean.length % 2 !== 0) return null;
+    if (clean.length % 2 !== 0) {
+      return null;
+    }
+
     const bytes: number[] = [];
     for (let i = 0; i < clean.length; i += 2) {
-      bytes.push(parseInt(clean.slice(i, i + 2), 16));
+      bytes.push(Number.parseInt(clean.slice(i, i + 2), 16));
     }
     return bytes;
   };
 
-  const bytesToHex = (bytes: number[]) => bytes.map((b) => b.toString(16).padStart(2, '0')).join('');
-  const bytesToAscii = (bytes: number[]) => bytes.map((b) => (b >= 32 && b <= 126 ? String.fromCharCode(b) : '.')).join('');
+  const bytesToHex = (bytes: number[]) => bytes.map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  const bytesToAscii = (bytes: number[]) => bytes.map((byte) => (byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : '.')).join('');
 
   if (type === 'xor_bytes') {
     return (
       <>
         <div className="flex gap-2">
           <div className="flex-1">
-            <label className={labelClass}>Key</label>
-            <input type="text" value={params.key || ''} onChange={(e) => update('key', e.target.value)} placeholder="HEX 或 UTF-8" className={inputClass} />
+            <label className={labelClass}>密钥</label>
+            <input
+              type="text"
+              value={params.key || ''}
+              onChange={(event) => update('key', event.target.value)}
+              placeholder="输入 HEX 或 UTF-8 文本"
+              className={inputClass}
+            />
           </div>
-          <div className="w-20">
-            <label className={labelClass}>类型</label>
+          <div className="w-28">
+            <label className={labelClass}>密钥类型</label>
             <MiniSelect
               value={params.key_type || 'hex'}
-              onChange={(v) => update('key_type', v)}
+              onChange={(value) => update('key_type', value)}
               options={typeOptions}
             />
           </div>
         </div>
         <div className="flex gap-2">
           <div className="flex-1">
-            <label className={labelClass}>数据类型</label>
+            <label className={labelClass}>输入类型</label>
             <MiniSelect
               value={params.data_type || 'hex'}
-              onChange={(v) => update('data_type', v)}
+              onChange={(value) => update('data_type', value)}
               options={typeOptions}
             />
           </div>
           <div className="flex-1">
-            <label className={labelClass}>输出</label>
+            <label className={labelClass}>输出格式</label>
             <MiniSelect
               value={params.output_format || 'hex'}
-              onChange={(v) => update('output_format', v)}
+              onChange={(value) => update('output_format', value)}
               options={xorOutputOptions}
             />
           </div>
         </div>
-        <div className="text-[10px] text-gray-500">用于重复密钥 XOR、字节混淆等场景</div>
+        <div className="text-[10px] text-slate-500">适合处理重复密钥 XOR、简单字节混淆和自定义异或链路。</div>
       </>
     );
   }
 
   if (type === 'known_plaintext_helper') {
     const plainHex = params.preset && params.preset !== 'custom'
-      ? (magicPresets.find((p) => p.id === params.preset)?.hex || '')
+      ? (magicPresets.find((preset) => preset.id === params.preset)?.hex || '')
       : (params.plain_hex || '');
 
     const cipherHex = normalizeHex(input || '');
     const cipherBytes = hexToBytes(cipherHex || '');
     const plainBytes = hexToBytes(plainHex || '');
     let error: string | null = null;
-    let keyHex = '';
     let keyRepeatHex = '';
     let bestLen = 0;
     let bestScore = 0;
@@ -445,29 +513,37 @@ function ParamsPanel({ operation, onUpdateParams, sboxNames, input, inputFormat,
 
     if (cipherBytes && plainBytes && cipherBytes.length > 0 && plainBytes.length > 0) {
       if (plainBytes.length > cipherBytes.length) {
-        error = '已知明文长度不能超过密文';
+        error = '已知明文长度不能超过密文。';
       } else {
-        const keyBytes = cipherBytes.slice(0, plainBytes.length).map((b, i) => b ^ plainBytes[i]);
+        const keyBytes = cipherBytes.slice(0, plainBytes.length).map((byte, idx) => byte ^ plainBytes[idx]);
         const maxLen = Math.min(32, keyBytes.length);
         let localBestLen = 1;
         let localBestScore = 0;
+
         for (let len = 1; len <= maxLen; len += 1) {
           let match = 0;
           for (let i = 0; i < keyBytes.length; i += 1) {
-            if (keyBytes[i] === keyBytes[i % len]) match += 1;
+            if (keyBytes[i] === keyBytes[i % len]) {
+              match += 1;
+            }
           }
+
           const score = match / keyBytes.length;
           if (score > localBestScore + 0.001 || (Math.abs(score - localBestScore) < 0.001 && len < localBestLen)) {
             localBestScore = score;
             localBestLen = len;
           }
         }
+
         bestLen = localBestLen;
         bestScore = localBestScore;
-        const useLen = params.use_repeat === false ? keyBytes.length : (parseInt(params.repeat_len || '', 10) || bestLen);
+
+        const useLen = params.use_repeat === false
+          ? keyBytes.length
+          : (Number.parseInt(params.repeat_len || '', 10) || bestLen);
+
         const keyRepeat = keyBytes.slice(0, useLen);
-        const decryptedBytes = cipherBytes.map((b, i) => b ^ keyRepeat[i % keyRepeat.length]);
-        keyHex = bytesToHex(keyBytes);
+        const decryptedBytes = cipherBytes.map((byte, idx) => byte ^ keyRepeat[idx % keyRepeat.length]);
         keyRepeatHex = bytesToHex(keyRepeat);
         previewHex = bytesToHex(decryptedBytes.slice(0, 128));
         previewAscii = bytesToAscii(decryptedBytes.slice(0, 128));
@@ -480,8 +556,8 @@ function ParamsPanel({ operation, onUpdateParams, sboxNames, input, inputFormat,
           <label className={labelClass}>明文预设</label>
           <MiniSelect
             value={params.preset || 'custom'}
-            onChange={(v) => update('preset', v)}
-            options={magicPresets.map((p) => ({ value: p.id, label: p.label }))}
+            onChange={(value) => update('preset', value)}
+            options={magicPresets.map((preset) => ({ value: preset.id, label: preset.label }))}
           />
         </div>
         <div>
@@ -489,50 +565,54 @@ function ParamsPanel({ operation, onUpdateParams, sboxNames, input, inputFormat,
           <input
             type="text"
             value={params.plain_hex || ''}
-            onChange={(e) => update('plain_hex', e.target.value)}
-            placeholder="仅在自定义时生效"
+            onChange={(event) => update('plain_hex', event.target.value)}
+            placeholder="仅在选择自定义时生效"
             className={inputClass}
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-2 text-xs text-gray-600">
-            <input type="checkbox" checked={params.use_repeat !== false} onChange={(e) => update('use_repeat', e.target.checked)} className="rounded" />
-            重复密钥推断
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            <input
+              type="checkbox"
+              checked={params.use_repeat !== false}
+              onChange={(event) => update('use_repeat', event.target.checked)}
+              className="rounded"
+            />
+            推断重复密钥
           </label>
           <input
             type="text"
             value={params.repeat_len || ''}
-            onChange={(e) => update('repeat_len', e.target.value)}
+            onChange={(event) => update('repeat_len', event.target.value)}
             placeholder="长度"
-            className="w-20 px-2 py-1.5 text-xs bg-white/60 border border-purple-200 rounded-lg"
+            className="w-20 rounded-lg border border-purple-200 bg-white/70 px-2 py-1.5 text-xs"
           />
           <button
             onClick={() => onUpsertXorKey(keyRepeatHex)}
             disabled={!keyRepeatHex}
-            className="ml-auto px-2.5 py-1.5 text-xs rounded-lg bg-sky-500 text-white disabled:opacity-40"
+            className="ml-auto rounded-lg bg-sky-500 px-2.5 py-1.5 text-xs text-white disabled:opacity-40"
           >
-            送入 XOR
+            写入 XOR
           </button>
         </div>
         {inputFormat !== 'HEX' && inputFormat !== 'AUTO' && (
-          <div className="text-[10px] text-amber-600">输入格式为 HEX/AUTO 时效果最佳</div>
+          <div className="text-[10px] text-amber-600">输入格式为 HEX 或 AUTO 时效果最佳。</div>
         )}
         {error && <div className="text-[10px] text-red-600">{error}</div>}
         {!error && keyRepeatHex && (
           <div className="space-y-1">
-            <div className="text-[10px] text-gray-500">推断长度: {bestLen} (置信 {Math.round(bestScore * 100)}%)</div>
-            <div className="text-[10px] text-gray-500">重复密钥 HEX</div>
-            <div className="px-2 py-1 bg-sky-50 rounded text-[11px] font-mono text-sky-700 break-all">{keyRepeatHex}</div>
-            <div className="text-[10px] text-gray-500">解密预览</div>
-            <div className="px-2 py-1 bg-sky-50 rounded text-[11px] font-mono text-sky-700 break-all">{previewHex}</div>
-            <div className="px-2 py-1 bg-white/80 rounded text-[11px] font-mono text-gray-700 break-all">{previewAscii}</div>
+            <div className="text-[10px] text-slate-500">推断长度：{bestLen}，置信度 {Math.round(bestScore * 100)}%</div>
+            <div className="text-[10px] text-slate-500">重复密钥 HEX</div>
+            <div className="break-all rounded bg-sky-50 px-2 py-1 font-mono text-[11px] text-sky-700">{keyRepeatHex}</div>
+            <div className="text-[10px] text-slate-500">解密预览</div>
+            <div className="break-all rounded bg-sky-50 px-2 py-1 font-mono text-[11px] text-sky-700">{previewHex}</div>
+            <div className="break-all rounded bg-white/80 px-2 py-1 font-mono text-[11px] text-slate-700">{previewAscii}</div>
           </div>
         )}
       </>
     );
   }
 
-  // MD5
   if (type === 'md5_hash' || type.includes('sha')) {
     return (
       <>
@@ -540,19 +620,25 @@ function ParamsPanel({ operation, onUpdateParams, sboxNames, input, inputFormat,
           <label className={labelClass}>输出格式</label>
           <MiniSelect
             value={params.output_format || 'hex'}
-            onChange={(v) => update('output_format', v)}
+            onChange={(value) => update('output_format', value)}
             options={outputFormatOptions}
           />
         </div>
         <div>
-          <label className={labelClass}>SALT</label>
-          <input type="text" value={params.salt || ''} onChange={(e) => update('salt', e.target.value)} placeholder="盐值 (UTF-8)" className={inputClass} />
+          <label className={labelClass}>盐值</label>
+          <input
+            type="text"
+            value={params.salt || ''}
+            onChange={(event) => update('salt', event.target.value)}
+            placeholder="输入 UTF-8 文本盐值"
+            className={inputClass}
+          />
         </div>
         <div>
-          <label className={labelClass}>SALT 位置</label>
+          <label className={labelClass}>盐值位置</label>
           <MiniSelect
             value={params.salt_position || 'suffix'}
-            onChange={(v) => update('salt_position', v)}
+            onChange={(value) => update('salt_position', value)}
             options={saltPositionOptions}
           />
         </div>
@@ -560,33 +646,43 @@ function ParamsPanel({ operation, onUpdateParams, sboxNames, input, inputFormat,
     );
   }
 
-  // RC4
   if (type.includes('rc4')) {
     return (
       <>
         <div className="flex gap-2">
           <div className="flex-1">
-            <label className={labelClass}>Key</label>
-            <input type="text" value={params.key || ''} onChange={(e) => update('key', e.target.value)} placeholder="密钥" className={inputClass} />
+            <label className={labelClass}>密钥</label>
+            <input
+              type="text"
+              value={params.key || ''}
+              onChange={(event) => update('key', event.target.value)}
+              placeholder="输入密钥"
+              className={inputClass}
+            />
           </div>
-          <div className="w-20">
-            <label className={labelClass}>类型</label>
+          <div className="w-28">
+            <label className={labelClass}>密钥类型</label>
             <MiniSelect
               value={params.key_type || 'utf-8'}
-              onChange={(v) => update('key_type', v)}
+              onChange={(value) => update('key_type', value)}
               options={typeOptions}
             />
           </div>
         </div>
-        <label className="flex items-center gap-2 text-xs text-gray-600">
-          <input type="checkbox" checked={params.swap_bytes || false} onChange={(e) => update('swap_bytes', e.target.checked)} className="rounded" />
-          Swap Bytes (Magic KSA)
+        <label className="flex items-center gap-2 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            checked={params.swap_bytes || false}
+            onChange={(event) => update('swap_bytes', event.target.checked)}
+            className="rounded"
+          />
+          交换 S 盒字节顺序（Magic KSA）
         </label>
         <div>
           <label className={labelClass}>S-Box</label>
           <MiniSelect
             value={params.sbox_name || 'Standard RC4'}
-            onChange={(v) => update('sbox_name', v)}
+            onChange={(value) => update('sbox_name', value)}
             options={sboxOptions}
           />
         </div>
@@ -594,23 +690,27 @@ function ParamsPanel({ operation, onUpdateParams, sboxNames, input, inputFormat,
     );
   }
 
-  // ChaCha20 / Salsa20
   if (type.includes('chacha20') || type.includes('salsa20')) {
-    const hint = type.includes('chacha20')
-      ? 'Key 32字节, Nonce 8字节 (可用HEX或UTF-8)'
-      : 'Key 32字节, Nonce 8字节 (可用HEX或UTF-8)';
+    const hint = '建议使用 32 字节密钥与 8 字节 Nonce，可输入 HEX 或 UTF-8 文本。';
+
     return (
       <>
         <div className="flex gap-2">
           <div className="flex-1">
-            <label className={labelClass}>Key</label>
-            <input type="text" value={params.key || ''} onChange={(e) => update('key', e.target.value)} placeholder="密钥" className={inputClass} />
+            <label className={labelClass}>密钥</label>
+            <input
+              type="text"
+              value={params.key || ''}
+              onChange={(event) => update('key', event.target.value)}
+              placeholder="输入密钥"
+              className={inputClass}
+            />
           </div>
-          <div className="w-20">
-            <label className={labelClass}>类型</label>
+          <div className="w-28">
+            <label className={labelClass}>密钥类型</label>
             <MiniSelect
               value={params.key_type || 'utf-8'}
-              onChange={(v) => update('key_type', v)}
+              onChange={(value) => update('key_type', value)}
               options={typeOptions}
             />
           </div>
@@ -618,69 +718,80 @@ function ParamsPanel({ operation, onUpdateParams, sboxNames, input, inputFormat,
         <div className="flex gap-2">
           <div className="flex-1">
             <label className={labelClass}>Nonce</label>
-            <input type="text" value={params.nonce || ''} onChange={(e) => update('nonce', e.target.value)} placeholder="可留空自动生成" className={inputClass} />
+            <input
+              type="text"
+              value={params.nonce || ''}
+              onChange={(event) => update('nonce', event.target.value)}
+              placeholder="可留空后续再补"
+              className={inputClass}
+            />
           </div>
-          <div className="w-20">
-            <label className={labelClass}>类型</label>
+          <div className="w-28">
+            <label className={labelClass}>Nonce 类型</label>
             <MiniSelect
               value={params.nonce_type || 'utf-8'}
-              onChange={(v) => update('nonce_type', v)}
+              onChange={(value) => update('nonce_type', value)}
               options={typeOptions}
             />
           </div>
         </div>
-        <div className="text-[10px] text-gray-500">
-          {hint}
-        </div>
+        <div className="text-[10px] text-slate-500">{hint}</div>
       </>
     );
   }
 
-  // DES / 3DES / AES / SM4 / Blowfish / CAST / ARC2
   const showIV = params.mode && params.mode !== 'ECB';
   const isSM4OrAES = type.includes('sm4') || type.includes('aes');
   const extraHint = type.includes('blowfish')
-    ? 'Blowfish Key: 4-56字节, IV: 8字节'
+    ? 'Blowfish 密钥长度建议 4 到 56 字节，IV 为 8 字节。'
     : type.includes('cast')
-      ? 'CAST5 Key: 5-16字节, IV: 8字节'
+      ? 'CAST5 密钥长度建议 5 到 16 字节，IV 为 8 字节。'
       : type.includes('arc2')
-        ? 'RC2/ARC2 Key: 5-128字节, IV: 8字节'
+        ? 'RC2/ARC2 密钥长度建议 5 到 128 字节，IV 为 8 字节。'
         : '';
 
   return (
     <>
       <div className="flex gap-2">
         <div className="flex-1">
-          <label className={labelClass}>Key</label>
-          <input type="text" value={params.key || ''} onChange={(e) => update('key', e.target.value)} placeholder="密钥" className={inputClass} />
+          <label className={labelClass}>密钥</label>
+          <input
+            type="text"
+            value={params.key || ''}
+            onChange={(event) => update('key', event.target.value)}
+            placeholder="输入密钥"
+            className={inputClass}
+          />
         </div>
-        <div className="w-20">
-          <label className={labelClass}>类型</label>
+        <div className="w-28">
+          <label className={labelClass}>密钥类型</label>
           <MiniSelect
             value={params.key_type || 'utf-8'}
-            onChange={(v) => update('key_type', v)}
+            onChange={(value) => update('key_type', value)}
             options={typeOptions}
           />
         </div>
       </div>
 
-      {extraHint && (
-        <div className="text-[10px] text-gray-500">
-          {extraHint}
-        </div>
-      )}
+      {extraHint && <div className="text-[10px] text-slate-500">{extraHint}</div>}
 
       {showIV && (
         <div className="flex gap-2">
           <div className="flex-1">
             <label className={labelClass}>IV</label>
-            <input type="text" value={params.iv || ''} onChange={(e) => update('iv', e.target.value)} placeholder="初始向量" className={inputClass} />
+            <input
+              type="text"
+              value={params.iv || ''}
+              onChange={(event) => update('iv', event.target.value)}
+              placeholder="输入初始向量"
+              className={inputClass}
+            />
           </div>
-          <div className="w-20">
-            <label className={labelClass}>类型</label>
+          <div className="w-28">
+            <label className={labelClass}>IV 类型</label>
             <MiniSelect
               value={params.iv_type || 'utf-8'}
-              onChange={(v) => update('iv_type', v)}
+              onChange={(value) => update('iv_type', value)}
               options={typeOptions}
             />
           </div>
@@ -689,18 +800,18 @@ function ParamsPanel({ operation, onUpdateParams, sboxNames, input, inputFormat,
 
       <div className="flex gap-2">
         <div className="flex-1">
-          <label className={labelClass}>Mode</label>
+          <label className={labelClass}>模式</label>
           <MiniSelect
             value={params.mode || 'ECB'}
-            onChange={(v) => update('mode', v)}
+            onChange={(value) => update('mode', value)}
             options={modeOptions}
           />
         </div>
         <div className="flex-1">
-          <label className={labelClass}>Padding</label>
+          <label className={labelClass}>填充</label>
           <MiniSelect
             value={params.padding || 'pkcs7'}
-            onChange={(v) => update('padding', v)}
+            onChange={(value) => update('padding', value)}
             options={paddingOptions}
           />
         </div>
@@ -712,30 +823,39 @@ function ParamsPanel({ operation, onUpdateParams, sboxNames, input, inputFormat,
             <label className={labelClass}>S-Box</label>
             <MiniSelect
               value={params.sbox_name || sboxNames[0] || ''}
-              onChange={(v) => update('sbox_name', v)}
+              onChange={(value) => update('sbox_name', value)}
               options={sboxOptions}
             />
           </div>
           <div className="flex gap-4">
-            <label className="flex items-center gap-2 text-xs text-gray-600">
-              <input type="checkbox" checked={params.swap_key_schedule || false} onChange={(e) => update('swap_key_schedule', e.target.checked)} className="rounded" />
-              Swap Key Schedule
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={params.swap_key_schedule || false}
+                onChange={(event) => update('swap_key_schedule', event.target.checked)}
+                className="rounded"
+              />
+              交换密钥调度
             </label>
-            <label className="flex items-center gap-2 text-xs text-gray-600">
-              <input type="checkbox" checked={params.swap_data_round || false} onChange={(e) => update('swap_data_round', e.target.checked)} className="rounded" />
-              Swap Data Round
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={params.swap_data_round || false}
+                onChange={(event) => update('swap_data_round', event.target.checked)}
+                className="rounded"
+              />
+              交换轮函数数据
             </label>
           </div>
         </>
       )}
 
-      {/* DES/3DES Custom S-Box */}
-      {(type.includes('des')) && (
+      {type.includes('des') && (
         <div>
           <label className={labelClass}>S-Box</label>
           <MiniSelect
             value={params.sbox_name || 'Standard DES'}
-            onChange={(v) => update('sbox_name', v)}
+            onChange={(value) => update('sbox_name', value)}
             options={sboxOptions}
           />
         </div>

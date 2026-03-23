@@ -1,6 +1,7 @@
-import { Copy, Check, Upload } from 'lucide-react';
+import { Check, Copy, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { MiniSelect } from '@/shared/components/CustomSelect';
+
 
 interface OperationAreaProps {
   input: string;
@@ -12,12 +13,14 @@ interface OperationAreaProps {
   onOutputFormatChange: (format: string) => void;
 }
 
+
 const formatOptions = [
   { value: 'AUTO', label: 'AUTO' },
   { value: 'UTF-8', label: 'UTF-8' },
   { value: 'HEX', label: 'HEX' },
   { value: 'ASCII', label: 'ASCII' },
 ];
+
 
 export function OperationArea({
   input,
@@ -40,67 +43,79 @@ export function OperationArea({
   const importHexFromFile = async (file: File) => {
     const buffer = await file.arrayBuffer();
     const bytes = new Uint8Array(buffer);
-    const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+    const hex = Array.from(bytes).map((byte) => byte.toString(16).padStart(2, '0')).join('');
     onInputChange(hex);
     onInputFormatChange('HEX');
   };
 
   return (
-    <div className="h-full bg-white/50 backdrop-blur-md rounded-3xl p-5 ring-1 ring-blue-200 flex flex-col overflow-hidden">
-      <h2 className="text-base mb-3 text-gray-700 flex items-center gap-2 flex-shrink-0">
-        <div className="w-1 h-5 bg-gradient-to-b from-blue-500 to-cyan-500 rounded-full"></div>
-        操作区域
-      </h2>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-blue-100 bg-white/70 p-5 shadow-sm backdrop-blur-md">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-base font-semibold text-slate-800">
+            <div className="h-5 w-1 rounded-full bg-gradient-to-b from-blue-500 to-cyan-500" />
+            输入 / 输出
+          </h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            左侧输入待处理内容，右侧查看结果；桌面端会自动并排显示，方便对照。
+          </p>
+        </div>
+      </div>
 
-      <div className="grid flex-1 min-h-0 gap-3 2xl:grid-cols-2">
-        {/* Input Area */}
-        <div className="flex min-h-0 flex-col rounded-2xl border border-blue-100 bg-white/55 p-3 shadow-sm">
+      <div className="grid flex-1 min-h-0 gap-3 xl:grid-cols-2">
+        <section className="flex min-h-0 flex-col rounded-2xl border border-blue-100 bg-white/75 p-3 shadow-sm">
           <div className="mb-2 flex items-center justify-between gap-3">
             <div>
-              <label className="text-sm text-gray-600 font-medium">输入</label>
-              <div className="text-[11px] text-gray-500">支持文本、HEX、ASCII；导入文件会自动转成 HEX。</div>
+              <label className="text-sm font-medium text-slate-700">输入</label>
+              <div className="text-[11px] text-slate-500">
+                支持文本、HEX、ASCII；从文件导入时会自动转成 HEX。
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <input
                 ref={fileRef}
                 type="file"
                 className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) {
+                    return;
+                  }
+
                   importHexFromFile(file);
-                  e.currentTarget.value = '';
+                  event.currentTarget.value = '';
                 }}
               />
               <button
                 onClick={() => fileRef.current?.click()}
-                className="p-1.5 rounded-lg bg-white/70 ring-1 ring-blue-200 text-blue-600 hover:bg-blue-50"
-                title="从文件导入 HEX"
+                className="rounded-lg bg-white/80 p-1.5 text-blue-600 ring-1 ring-blue-200 transition-all hover:bg-blue-50"
+                title="从文件导入为 HEX"
               >
-                <Upload className="w-4 h-4" />
+                <Upload className="h-4 w-4" />
               </button>
               <MiniSelect
                 value={inputFormat}
                 onChange={onInputFormatChange}
                 options={formatOptions}
               />
-              <span className="text-xs text-gray-400">{input.length} 字符</span>
+              <span className="text-xs text-slate-400">{input.length} 字符</span>
             </div>
           </div>
           <textarea
             value={input}
-            onChange={(e) => onInputChange(e.target.value)}
-            placeholder="在此输入需要处理的文本..."
-            className="flex-1 min-h-[260px] w-full resize-none rounded-2xl border border-blue-200 bg-white/60 px-4 py-3 text-sm font-mono transition-all focus:outline-none focus:ring-2 focus:ring-blue-400"
+            onChange={(event) => onInputChange(event.target.value)}
+            placeholder="在这里输入需要处理的文本或二进制内容……"
+            className="flex-1 min-h-[280px] w-full resize-none rounded-2xl border border-blue-200 bg-white/80 px-4 py-3 text-sm font-mono text-slate-700 transition-all focus:outline-none focus:ring-2 focus:ring-blue-300"
           />
-        </div>
+        </section>
 
-        {/* Output Area */}
-        <div className="flex min-h-0 flex-col rounded-2xl border border-cyan-100 bg-white/55 p-3 shadow-sm">
+        <section className="flex min-h-0 flex-col rounded-2xl border border-cyan-100 bg-white/75 p-3 shadow-sm">
           <div className="mb-2 flex items-center justify-between gap-3">
             <div>
-              <label className="text-sm text-gray-600 font-medium">输出</label>
-              <div className="text-[11px] text-gray-500">便于直接比对结果，宽屏下会与输入区并排显示。</div>
+              <label className="text-sm font-medium text-slate-700">输出</label>
+              <div className="text-[11px] text-slate-500">
+                结果会保留格式，便于直接复制、比对和继续分析。
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <MiniSelect
@@ -111,18 +126,18 @@ export function OperationArea({
               <button
                 onClick={copyOutput}
                 disabled={!output}
-                className="p-1.5 rounded-lg hover:bg-blue-100 text-gray-500 hover:text-blue-600 transition-colors disabled:opacity-30"
-                title="复制"
+                className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-blue-100 hover:text-blue-600 disabled:opacity-30"
+                title="复制输出"
               >
-                {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
               </button>
-              <span className="text-xs text-gray-400">{output.length} 字符</span>
+              <span className="text-xs text-slate-400">{output.length} 字符</span>
             </div>
           </div>
-          <div className="flex-1 min-h-[260px] w-full overflow-auto rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-cyan-50 px-4 py-3 text-sm font-mono text-gray-700 whitespace-pre-wrap">
-            {output || <span className="text-gray-400">输出结果将显示在此处...</span>}
+          <div className="flex-1 min-h-[280px] w-full overflow-auto rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-cyan-50 px-4 py-3 text-sm font-mono text-slate-700 whitespace-pre-wrap">
+            {output || <span className="text-slate-400">输出结果会显示在这里……</span>}
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );

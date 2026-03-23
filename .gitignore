@@ -21,7 +21,7 @@ dist/
 # User data
 core/script/user_scripts/*
 !core/script/user_scripts/.gitkeep
-app/sboxes.json
+data/custom_blocks.json
 
 # IDE & Editor
 .idea/

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verification: Pipeline decrypt with Chinese text containing newlines."""
 import sys, os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from core.decoder.pipeline import Pipeline, Operation, OPERATION_REGISTRY
 

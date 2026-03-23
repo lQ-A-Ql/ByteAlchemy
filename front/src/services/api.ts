@@ -157,7 +157,7 @@ export async function deleteScript(id: string): Promise<void> {
   await apiRequest(`/api/scripts/${id}`, 'DELETE');
 }
 
-export async function runScript(id: string): Promise<{ output: string; return_code: number }> {
+export async function runScript(id: string): Promise<{ output: string; success: boolean }> {
   return apiRequest(`/api/scripts/${id}/run`, 'POST');
 }
 

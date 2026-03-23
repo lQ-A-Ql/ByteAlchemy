@@ -1,29 +1,15 @@
-import { useState, useEffect } from 'react';
-import { Sidebar } from '@/shared/components/Sidebar';
+import { useEffect, useState } from 'react';
 import { MainContent } from '@/app/MainContent';
+import type { AppTabId } from '@/app/navigation';
+import { Sidebar } from '@/shared/components/Sidebar';
+import { useStoredNumber, useStoredString } from '@/shared/hooks/useStoredPreference';
+
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('decoder');
-  const [bgImage, setBgImage] = useState('');
-  const [bgOpacity, setBgOpacity] = useState(0.3);
-  const [logoImage, setLogoImage] = useState('');
-
-  // Load global wallpaper from localStorage
-  useEffect(() => {
-    const loadWallpaper = () => {
-      setBgImage(localStorage.getItem('terminal_bg_image') || '');
-      setBgOpacity(parseFloat(localStorage.getItem('terminal_bg_opacity') || '0.3'));
-    };
-    loadWallpaper();
-    window.addEventListener('storage', loadWallpaper);
-    // Also listen for custom event for same-tab updates
-    const handleUpdate = () => loadWallpaper();
-    window.addEventListener('wallpaper-update', handleUpdate);
-    return () => {
-      window.removeEventListener('storage', loadWallpaper);
-      window.removeEventListener('wallpaper-update', handleUpdate);
-    };
-  }, []);
+  const [activeTab, setActiveTab] = useState<AppTabId>('decoder');
+  const bgImage = useStoredString('terminal_bg_image', '', 'wallpaper-update');
+  const bgOpacity = useStoredNumber('terminal_bg_opacity', 0.3, 'wallpaper-update');
+  const logoImage = useStoredString('app_logo_image', '', 'logo-update');
 
   useEffect(() => {
     const handleOpenTerminal = () => setActiveTab('script');
@@ -31,36 +17,29 @@ export default function App() {
     return () => window.removeEventListener('open-terminal', handleOpenTerminal);
   }, []);
 
-  useEffect(() => {
-    const loadLogo = () => {
-      setLogoImage(localStorage.getItem('app_logo_image') || '');
-    };
-    loadLogo();
-    window.addEventListener('storage', loadLogo);
-    const handleUpdate = () => loadLogo();
-    window.addEventListener('logo-update', handleUpdate);
-    return () => {
-      window.removeEventListener('storage', loadLogo);
-      window.removeEventListener('logo-update', handleUpdate);
-    };
-  }, []);
-
   return (
-    <div className="size-full min-h-0 min-w-0 flex overflow-hidden bg-gradient-to-br from-white via-pink-50 to-purple-50 relative">
-      {/* Global Wallpaper */}
+    <div className="relative flex size-full min-h-0 min-w-0 overflow-hidden bg-[radial-gradient(circle_at_top_left,#fff7ed_0%,#eff6ff_42%,#e2e8f0_100%)] text-slate-900">
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.6)_0%,rgba(255,255,255,0)_28%,rgba(14,165,233,0.08)_100%)]" />
+      <div className="pointer-events-none absolute inset-0 opacity-40 [background-image:linear-gradient(rgba(148,163,184,0.12)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.12)_1px,transparent_1px)] [background-size:32px_32px]" />
+
       {bgImage && (
         <div
-          className="absolute inset-0 pointer-events-none z-0"
+          className="pointer-events-none absolute inset-0 z-0"
           style={{
             backgroundImage: `url(${bgImage})`,
-            backgroundSize: 'cover',
             backgroundPosition: 'center',
+            backgroundSize: 'cover',
             opacity: bgOpacity,
           }}
         />
       )}
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} logoSrc={logoImage} />
-      <MainContent activeTab={activeTab} />
+
+      <div className="relative z-10 flex size-full min-h-0 min-w-0 overflow-hidden p-3 sm:p-4">
+        <div className="flex size-full min-h-0 min-w-0 overflow-hidden rounded-[28px] border border-white/70 bg-white/55 shadow-[0_20px_80px_rgba(15,23,42,0.12)] backdrop-blur-xl">
+          <Sidebar activeTab={activeTab} onTabChange={setActiveTab} logoSrc={logoImage} />
+          <MainContent activeTab={activeTab} />
+        </div>
+      </div>
     </div>
   );
 }
